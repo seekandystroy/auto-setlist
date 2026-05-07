@@ -34,3 +34,6 @@ go.work.sum
 
 # Mac OS shenanigans
 *.DS_Store
+
+# Spotify token while this is run locally
+spotify_token.json

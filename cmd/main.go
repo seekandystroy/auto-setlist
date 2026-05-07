@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/seekandystroy/auto-setlist/internal/adapters"
 	"github.com/seekandystroy/auto-setlist/internal/core/service"
@@ -22,8 +23,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	clientID := os.Getenv("SPOTIFY_CLIENT_ID")
+	clientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+	if clientID == "" || clientSecret == "" {
+		fmt.Fprintln(os.Stderr, "error: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET must be set")
+		os.Exit(1)
+	}
+
+	spotifyAdapter, err := adapters.NewSpotifyAdapter(clientID, clientSecret, adapters.NewSpotifyCallbackAdapter())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
 	setlistFmAdapter := adapters.NewSetlistFmAdapter(apiKey)
-	svc := service.NewService(setlistFmAdapter)
+	svc := service.NewService(setlistFmAdapter, spotifyAdapter)
 
 	artists, err := svc.SearchArtistsJSON(artistName)
 	if err != nil {
@@ -31,8 +45,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Outputting just one artists' struct for testing purposes before implementation
-	artistString := fmt.Sprintf("%+v", artists[0])
+	fmt.Printf("%+v\n", artists[0])
 
-	fmt.Println(artistString)
+	token, err := svc.AuthWithSpotify()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Spotify token obtained (expires: %s)\n", token.ExpiresAt.Format(time.RFC3339))
 }

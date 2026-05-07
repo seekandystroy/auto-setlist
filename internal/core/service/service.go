@@ -9,10 +9,19 @@ import (
 
 type service struct {
 	searcher ports.SetlistFm
+	spotify  ports.Spotify
 }
 
-func NewService(setlistfm ports.SetlistFm) *service {
-	return &service{searcher: setlistfm}
+func NewService(setlistfm ports.SetlistFm, spotify ports.Spotify) *service {
+	return &service{searcher: setlistfm, spotify: spotify}
+}
+
+func (s *service) AuthWithSpotify() (*domain.SpotifyToken, error) {
+	token, err := s.spotify.GetValidToken()
+	if err != nil {
+		return nil, fmt.Errorf("authenticating with Spotify: %w", err)
+	}
+	return token, nil
 }
 
 func (s *service) SearchArtistsJSON(name string) ([]domain.Artist, error) {

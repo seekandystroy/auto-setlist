@@ -17,8 +17,17 @@ func (m *mockSearcher) SearchArtists(name string) (*domain.ArtistSearchResult, e
 	return m.result, m.err
 }
 
+type mockSpotify struct {
+	token *domain.SpotifyToken
+	err   error
+}
+
+func (m *mockSpotify) GetValidToken() (*domain.SpotifyToken, error) {
+	return m.token, m.err
+}
+
 func TestSearchArtistsJSON_EmptyName(t *testing.T) {
-	svc := NewService(&mockSearcher{})
+	svc := NewService(&mockSearcher{}, &mockSpotify{})
 	_, err := svc.SearchArtistsJSON("")
 	if err == nil {
 		t.Fatal("expected error for empty name, got nil")
@@ -35,7 +44,7 @@ func TestSearchArtistsJSON_ReturnsArtists(t *testing.T) {
 	mock := &mockSearcher{
 		result: &domain.ArtistSearchResult{Artists: artists},
 	}
-	svc := NewService(mock)
+	svc := NewService(mock, &mockSpotify{})
 
 	got, err := svc.SearchArtistsJSON("Sprout")
 	if err != nil {
@@ -52,7 +61,7 @@ func TestSearchArtistsJSON_ReturnsArtists(t *testing.T) {
 func TestSearchArtistsJSON_WrapsSearcherError(t *testing.T) {
 	underlying := errors.New("connection refused")
 	mock := &mockSearcher{err: underlying}
-	svc := NewService(mock)
+	svc := NewService(mock, &mockSpotify{})
 
 	_, err := svc.SearchArtistsJSON("Sprout")
 	if err == nil {
