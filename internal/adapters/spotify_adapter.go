@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -47,6 +48,15 @@ type spotifySearchResponse struct {
 	Tracks struct {
 		Items []spotifySearchTrack `json:"items"`
 	} `json:"tracks"`
+}
+
+type spotifyCreatePlaylistRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type spotifyPlaylist struct {
+	ID string `json:"id"`
 }
 
 type spotifyToken struct {
@@ -139,6 +149,46 @@ func (a *spotifyAdapter) GetSetlistTracks(setlist domain.Setlist) ([]string, err
 	return uris, nil
 }
 
+func (a *spotifyAdapter) CreatePlaylist(setlist domain.Setlist) (string, error) {
+	token, err := a.GetValidToken()
+	if err != nil {
+		return "", fmt.Errorf("spotify: getting token: %w", err)
+	}
+
+	body := spotifyCreatePlaylistRequest{
+		Name:        fmt.Sprintf("%s setlist by auto-playlist", setlist.Artist.Name),
+		Description: "auto-generated",
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return "", fmt.Errorf("spotify: marshalling playlist request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, a.apiBaseURL+"/me/playlists", bytes.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("spotify: building create playlist request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("spotify: executing create playlist request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("spotify: unexpected status %d from create playlist", resp.StatusCode)
+	}
+
+	var playlist spotifyPlaylist
+	if err := json.NewDecoder(resp.Body).Decode(&playlist); err != nil {
+		return "", fmt.Errorf("spotify: decoding create playlist response: %w", err)
+	}
+
+	return playlist.ID, nil
+}
+
 func (a *spotifyAdapter) searchTrack(token, trackName string, artist domain.Artist) (string, bool, error) {
 	params := url.Values{
 		"q":     {fmt.Sprintf("track:%s artist:%s", trackName, artist.Name)},
@@ -184,7 +234,7 @@ func (a *spotifyAdapter) buildAuthURL(state string) string {
 		"client_id":     {a.clientID},
 		"response_type": {"code"},
 		"redirect_uri":  {a.redirectURI},
-		"scope":         {"playlist-modify-private"},
+		"scope":         {"playlist-modify-public playlist-modify-private"},
 		"state":         {state},
 	}
 	return a.accountsBaseURL + "/authorize?" + params.Encode()

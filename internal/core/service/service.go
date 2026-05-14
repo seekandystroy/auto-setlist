@@ -18,30 +18,30 @@ func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify, musicbrainz po
 }
 
 // MVP using the first Artist and first setlist found in the first page
-func (s *service) SetlistToPlaylist(name string) ([]string, error) {
+func (s *service) SetlistToPlaylist(name string) (string, []string, error) {
 	if name == "" {
-		return nil, fmt.Errorf("artist name must not be empty")
+		return "", nil, fmt.Errorf("artist name must not be empty")
 	}
 
 	artists, err := s.searchArtists(name)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if len(artists) == 0 {
-		return nil, fmt.Errorf("no artist found for %q", name)
+		return "", nil, fmt.Errorf("no artist found for %q", name)
 	}
 
 	artist := artists[0]
 	if err := s.fillSpotifyID(&artist); err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	setlists, err := s.getSetlists(artist)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	if len(setlists) == 0 {
-		return nil, fmt.Errorf("no setlists found for %q", name)
+		return "", nil, fmt.Errorf("no setlists found for %q", name)
 	}
 
 	var setlist *domain.Setlist
@@ -53,10 +53,20 @@ func (s *service) SetlistToPlaylist(name string) ([]string, error) {
 	}
 
 	if setlist == nil {
-		return nil, fmt.Errorf("no non-empty setlists found for %q", name)
+		return "", nil, fmt.Errorf("no non-empty setlists found for %q", name)
 	}
 
-	return s.spotify.GetSetlistTracks(*setlist)
+	uris, err := s.spotify.GetSetlistTracks(*setlist)
+	if err != nil {
+		return "", nil, err
+	}
+
+	playlistID, err := s.spotify.CreatePlaylist(*setlist)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return playlistID, uris, nil
 }
 
 func (s *service) searchArtists(name string) ([]domain.Artist, error) {

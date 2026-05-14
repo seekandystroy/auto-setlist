@@ -507,3 +507,116 @@ func TestGetSetlistTracks_SendsBearerToken(t *testing.T) {
 		t.Errorf("expected access token in header, got: %s", gotAuth)
 	}
 }
+
+func TestCreatePlaylist_HappyPath(t *testing.T) {
+	setlist := domain.Setlist{Artist: domain.Artist{Name: "Pitbull"}}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(spotifyPlaylist{ID: "playlist-xyz"})
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	id, err := a.CreatePlaylist(setlist)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != "playlist-xyz" {
+		t.Errorf("expected playlist ID %q, got %q", "playlist-xyz", id)
+	}
+}
+
+func TestCreatePlaylist_PlaylistName(t *testing.T) {
+	var gotBody spotifyCreatePlaylistRequest
+	setlist := domain.Setlist{Artist: domain.Artist{Name: "Pitbull"}}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(spotifyPlaylist{ID: "x"})
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	a.CreatePlaylist(setlist)
+
+	wantName := "Pitbull setlist by auto-playlist"
+	if gotBody.Name != wantName {
+		t.Errorf("expected name %q, got %q", wantName, gotBody.Name)
+	}
+	if gotBody.Description != "auto-generated" {
+		t.Errorf("expected description %q, got %q", "auto-generated", gotBody.Description)
+	}
+}
+
+func TestCreatePlaylist_SendsCorrectHeaders(t *testing.T) {
+	var gotAuth, gotContentType string
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotContentType = r.Header.Get("Content-Type")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(spotifyPlaylist{ID: "x"})
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	a.CreatePlaylist(domain.Setlist{})
+
+	if !strings.HasPrefix(gotAuth, "Bearer ") {
+		t.Errorf("expected Bearer auth, got: %s", gotAuth)
+	}
+	if gotContentType != "application/json" {
+		t.Errorf("expected Content-Type application/json, got: %s", gotContentType)
+	}
+}
+
+func TestCreatePlaylist_NonOKStatus(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	_, err := a.CreatePlaylist(domain.Setlist{})
+	if err == nil {
+		t.Fatal("expected error for non-201 status, got nil")
+	}
+	if !strings.Contains(err.Error(), "unexpected status") {
+		t.Errorf("expected 'unexpected status' in error, got %q", err.Error())
+	}
+}
+
+func TestCreatePlaylist_MalformedJSON(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte("not json {{{"))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	_, err := a.CreatePlaylist(domain.Setlist{})
+	if err == nil {
+		t.Fatal("expected decode error, got nil")
+	}
+	if !strings.Contains(err.Error(), "decoding create playlist response") {
+		t.Errorf("expected 'decoding create playlist response' in error, got %q", err.Error())
+	}
+}

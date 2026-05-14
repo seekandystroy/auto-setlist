@@ -41,10 +41,10 @@ func main() {
 		adapters.NewMusicbrainzAdapter(),
 	)
 
-	uris, err := svc.SetlistToPlaylist(artistName)
+	playlistID, uris, err := svc.SetlistToPlaylist(artistName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%+v\n", uris)
+	fmt.Printf("playlist: %s\ntracks: %+v\n", playlistID, uris)
 }
