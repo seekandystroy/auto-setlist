@@ -8,12 +8,12 @@ import (
 )
 
 type service struct {
-	setlistfm   ports.SetlistFm
+	setlistfm   ports.Setlistfm
 	spotify     ports.Spotify
 	musicbrainz ports.Musicbrainz
 }
 
-func NewService(setlistfm ports.SetlistFm, spotify ports.Spotify, musicbrainz ports.Musicbrainz) *service {
+func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify, musicbrainz ports.Musicbrainz) *service {
 	return &service{setlistfm: setlistfm, spotify: spotify, musicbrainz: musicbrainz}
 }
 

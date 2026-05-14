@@ -36,7 +36,7 @@ func main() {
 	}
 
 	svc := service.NewService(
-		adapters.NewSetlistFmAdapter(apiKey),
+		adapters.NewSetlistfmAdapter(apiKey),
 		spotifyAdapter,
 		adapters.NewMusicbrainzAdapter(),
 	)

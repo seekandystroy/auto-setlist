@@ -10,8 +10,8 @@ import (
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
-func newTestAdapter(serverURL string) *setlistFMAdapter {
-	return &setlistFMAdapter{
+func newTestAdapter(serverURL string) *setlistfmAdapter {
+	return &setlistfmAdapter{
 		apiKey:     "test-key",
 		httpClient: &http.Client{},
 		baseURL:    serverURL,

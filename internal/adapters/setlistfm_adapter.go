@@ -9,7 +9,7 @@ import (
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
-type setlistFMAdapter struct {
+type setlistfmAdapter struct {
 	apiKey     string
 	httpClient *http.Client
 	baseURL    string
@@ -51,15 +51,15 @@ type setlistfmSetlistsResponse struct {
 	Setlists []setlistfmSetlist `json:"setlist"`
 }
 
-func NewSetlistFmAdapter(apiKey string) *setlistFMAdapter {
-	return &setlistFMAdapter{
+func NewSetlistfmAdapter(apiKey string) *setlistfmAdapter {
+	return &setlistfmAdapter{
 		apiKey:     apiKey,
 		httpClient: &http.Client{},
 		baseURL:    "https://api.setlist.fm/rest/1.0",
 	}
 }
 
-func (c *setlistFMAdapter) SearchArtists(name string) ([]domain.Artist, error) {
+func (c *setlistfmAdapter) SearchArtists(name string) ([]domain.Artist, error) {
 	// Intentionally just getting the first page of results, artist choice later
 	endpoint := fmt.Sprintf(
 		"%s/search/artists?artistName=%s&p=1&sort=relevance",
@@ -96,7 +96,7 @@ func (c *setlistFMAdapter) SearchArtists(name string) ([]domain.Artist, error) {
 	return artists, nil
 }
 
-func (c *setlistFMAdapter) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
+func (c *setlistfmAdapter) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
 	endpoint := fmt.Sprintf("%s/artist/%s/setlists?p=1", c.baseURL, artist.MBID)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
