@@ -17,15 +17,8 @@ func NewService(setlistfm ports.SetlistFm, spotify ports.Spotify, musicbrainz po
 	return &service{setlistfm: setlistfm, spotify: spotify, musicbrainz: musicbrainz}
 }
 
-func (s *service) AuthWithSpotify() (string, error) {
-	token, err := s.spotify.GetValidToken()
-	if err != nil {
-		return "", fmt.Errorf("authenticating with Spotify: %w", err)
-	}
-	return token, nil
-}
-
-func (s *service) GetArtistSetlists(name string) ([]domain.Setlist, error) {
+// MVP using the first Artist and first setlist found in the first page
+func (s *service) SetlistToPlaylist(name string) ([]string, error) {
 	if name == "" {
 		return nil, fmt.Errorf("artist name must not be empty")
 	}
@@ -43,7 +36,27 @@ func (s *service) GetArtistSetlists(name string) ([]domain.Setlist, error) {
 		return nil, err
 	}
 
-	return s.getSetlists(artist)
+	setlists, err := s.getSetlists(artist)
+	if err != nil {
+		return nil, err
+	}
+	if len(setlists) == 0 {
+		return nil, fmt.Errorf("no setlists found for %q", name)
+	}
+
+	var setlist *domain.Setlist
+	for _, s := range setlists {
+		if len(s.Tracks) > 0 {
+			setlist = &s
+			break
+		}
+	}
+
+	if setlist == nil {
+		return nil, fmt.Errorf("no non-empty setlists found for %q", name)
+	}
+
+	return s.spotify.GetSetlistTracks(*setlist)
 }
 
 func (s *service) searchArtists(name string) ([]domain.Artist, error) {

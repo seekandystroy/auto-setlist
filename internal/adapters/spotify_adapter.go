@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 	"github.com/seekandystroy/auto-setlist/internal/ports"
 )
 
@@ -26,9 +27,26 @@ type spotifyAdapter struct {
 	redirectURI      string
 	httpClient       *http.Client
 	accountsBaseURL  string
+	apiBaseURL       string
 	tokenFilePath    string
 	openBrowserFn    func(string) error
 	callbackReceiver ports.SpotifyCallbackReceiver
+}
+
+type spotifySearchArtist struct {
+	ID string `json:"id"`
+}
+
+type spotifySearchTrack struct {
+	Name    string                `json:"name"`
+	URI     string                `json:"uri"`
+	Artists []spotifySearchArtist `json:"artists"`
+}
+
+type spotifySearchResponse struct {
+	Tracks struct {
+		Items []spotifySearchTrack `json:"items"`
+	} `json:"tracks"`
 }
 
 type spotifyToken struct {
@@ -66,6 +84,7 @@ func NewSpotifyAdapter(clientID, clientSecret string, callbackReceiver ports.Spo
 		redirectURI:      "http://127.0.0.1:8080/spotify_callback",
 		httpClient:       &http.Client{Timeout: 10 * time.Second},
 		accountsBaseURL:  "https://accounts.spotify.com",
+		apiBaseURL:       "https://api.spotify.com/v1",
 		tokenFilePath:    filepath.Join(dir, "spotify_token.json"),
 		callbackReceiver: callbackReceiver,
 	}
@@ -99,6 +118,65 @@ func (a *spotifyAdapter) GetValidToken() (string, error) {
 		return "", err
 	}
 	return tok.AccessToken, nil
+}
+
+func (a *spotifyAdapter) GetSetlistTracks(setlist domain.Setlist) ([]string, error) {
+	token, err := a.GetValidToken()
+	if err != nil {
+		return nil, fmt.Errorf("spotify: getting token: %w", err)
+	}
+
+	var uris []string
+	for _, trackName := range setlist.Tracks {
+		uri, found, err := a.searchTrack(token, trackName, setlist.Artist)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			uris = append(uris, uri)
+		}
+	}
+	return uris, nil
+}
+
+func (a *spotifyAdapter) searchTrack(token, trackName string, artist domain.Artist) (string, bool, error) {
+	params := url.Values{
+		"q":     {fmt.Sprintf("track:%s artist:%s", trackName, artist.Name)},
+		"type":  {"track"},
+		"limit": {"5"},
+	}
+	req, err := http.NewRequest(http.MethodGet, a.apiBaseURL+"/search?"+params.Encode(), nil)
+	if err != nil {
+		return "", false, fmt.Errorf("spotify: building search request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return "", false, fmt.Errorf("spotify: executing search request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", false, fmt.Errorf("spotify: unexpected status %d from search", resp.StatusCode)
+	}
+
+	var result spotifySearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", false, fmt.Errorf("spotify: decoding search response: %w", err)
+	}
+
+	for _, item := range result.Tracks.Items {
+		if !strings.EqualFold(item.Name, trackName) {
+			continue
+		}
+		for _, a := range item.Artists {
+			if a.ID == artist.SpotifyID {
+				return item.URI, true, nil
+			}
+		}
+	}
+	return "", false, nil
 }
 
 func (a *spotifyAdapter) buildAuthURL(state string) string {

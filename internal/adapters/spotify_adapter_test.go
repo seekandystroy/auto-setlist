@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
 type mockCallbackReceiver struct {
@@ -347,5 +349,161 @@ func TestBuildAuthURL_ContainsRequiredParams(t *testing.T) {
 		if !strings.Contains(authURL, check) {
 			t.Errorf("auth URL missing %q: %s", check, authURL)
 		}
+	}
+}
+
+// saveValidToken pre-populates a valid cached token so GetValidToken returns immediately.
+func saveValidToken(t *testing.T, a *spotifyAdapter) {
+	t.Helper()
+	tok := &spotifyToken{AccessToken: "test-access-token", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := a.saveToken(tok); err != nil {
+		t.Fatalf("saveValidToken: %v", err)
+	}
+}
+
+func makeSearchResponse(name, uri, artistID string) spotifySearchResponse {
+	return spotifySearchResponse{Tracks: struct {
+		Items []spotifySearchTrack `json:"items"`
+	}{Items: []spotifySearchTrack{
+		{Name: name, URI: uri, Artists: []spotifySearchArtist{{ID: artistID}}},
+	}}}
+}
+
+func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
+	setlist := domain.Setlist{
+		Artist: domain.Artist{MBID: "m1", Name: "Pitbull", SpotifyID: "artist-id"},
+		Tracks: []string{"Give Me Everything", "Timber"},
+	}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		var resp spotifySearchResponse
+		if strings.Contains(q, "Give+Me+Everything") || strings.Contains(q, "Give Me Everything") {
+			resp = makeSearchResponse("Give Me Everything", "spotify:track:uri1", "artist-id")
+		} else {
+			resp = makeSearchResponse("Timber", "spotify:track:uri2", "artist-id")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	uris, err := a.GetSetlistTracks(setlist)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(uris) != 2 {
+		t.Fatalf("expected 2 URIs, got %d", len(uris))
+	}
+	if uris[0] != "spotify:track:uri1" {
+		t.Errorf("unexpected first URI: %s", uris[0])
+	}
+}
+
+func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
+	setlist := domain.Setlist{
+		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Tracks: []string{"Known Song", "Unknown Song"},
+	}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(q, "Known") {
+			json.NewEncoder(w).Encode(makeSearchResponse("Known Song", "spotify:track:uri1", "artist-id"))
+		} else {
+			json.NewEncoder(w).Encode(spotifySearchResponse{})
+		}
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	uris, err := a.GetSetlistTracks(setlist)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(uris) != 1 {
+		t.Errorf("expected 1 URI (unknown track skipped), got %d", len(uris))
+	}
+}
+
+func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
+	setlist := domain.Setlist{
+		Artist: domain.Artist{SpotifyID: "correct-artist"},
+		Tracks: []string{"Song"},
+	}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Returns a track with the right name but wrong artist ID.
+		json.NewEncoder(w).Encode(makeSearchResponse("Song", "spotify:track:uri1", "wrong-artist"))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	uris, err := a.GetSetlistTracks(setlist)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(uris) != 0 {
+		t.Errorf("expected 0 URIs (wrong artist skipped), got %d", len(uris))
+	}
+}
+
+func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
+	setlist := domain.Setlist{
+		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Tracks: []string{"Song"},
+	}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	_, err := a.GetSetlistTracks(setlist)
+	if err == nil {
+		t.Fatal("expected error for non-OK status, got nil")
+	}
+	if !strings.Contains(err.Error(), "unexpected status") {
+		t.Errorf("expected 'unexpected status' in error, got %q", err.Error())
+	}
+}
+
+func TestGetSetlistTracks_SendsBearerToken(t *testing.T) {
+	var gotAuth string
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(spotifySearchResponse{})
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	a.GetSetlistTracks(domain.Setlist{Tracks: []string{"Song"}})
+
+	if !strings.HasPrefix(gotAuth, "Bearer ") {
+		t.Errorf("expected Bearer token, got: %s", gotAuth)
+	}
+	if !strings.Contains(gotAuth, "test-access-token") {
+		t.Errorf("expected access token in header, got: %s", gotAuth)
 	}
 }

@@ -41,18 +41,10 @@ func main() {
 		adapters.NewMusicbrainzAdapter(),
 	)
 
-	setlists, err := svc.GetArtistSetlists(artistName)
+	uris, err := svc.SetlistToPlaylist(artistName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%+v\n", setlists)
-
-	_, err = svc.AuthWithSpotify()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Spotify authorized successfully")
+	fmt.Printf("%+v\n", uris)
 }
