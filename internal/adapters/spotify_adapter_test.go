@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
 type mockCallbackReceiver struct {
@@ -24,7 +22,7 @@ func (m *mockCallbackReceiver) WaitForCode(_ context.Context, _ string) (string,
 	return m.code, m.err
 }
 
-// newTestAccountsAdapter returns a spotifyAccountsAdapter wired to the given test server URL
+// newTestAccountsAdapter returns a spotifyAdapter wired to the given test server URL
 // and a temp directory for token file storage.
 func newTestAccountsAdapter(t *testing.T, serverURL string) *spotifyAdapter {
 	t.Helper()
@@ -174,7 +172,7 @@ func TestRefreshAccessToken_RotatesRefreshToken(t *testing.T) {
 
 func TestSaveAndLoadToken_RoundTrip(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
-	original := &domain.SpotifyToken{
+	original := &spotifyToken{
 		AccessToken:  "access",
 		RefreshToken: "refresh",
 		TokenType:    "Bearer",
@@ -230,7 +228,7 @@ func TestGetValidToken_UsesValidCachedToken(t *testing.T) {
 	defer srv.Close()
 
 	a := newTestAccountsAdapter(t, srv.URL)
-	validToken := &domain.SpotifyToken{
+	validToken := &spotifyToken{
 		AccessToken:  "cached-token",
 		RefreshToken: "cached-refresh",
 		TokenType:    "Bearer",
@@ -244,8 +242,8 @@ func TestGetValidToken_UsesValidCachedToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if token.AccessToken != "cached-token" {
-		t.Errorf("expected cached token, got: %s", token.AccessToken)
+	if token != "cached-token" {
+		t.Errorf("expected cached token, got: %s", token)
 	}
 	if called {
 		t.Error("expected no HTTP call for valid cached token")
@@ -263,7 +261,7 @@ func TestGetValidToken_RefreshesExpiredToken(t *testing.T) {
 	defer srv.Close()
 
 	a := newTestAccountsAdapter(t, srv.URL)
-	expiredToken := &domain.SpotifyToken{
+	expiredToken := &spotifyToken{
 		AccessToken:  "old-access",
 		RefreshToken: "old-refresh",
 		TokenType:    "Bearer",
@@ -277,8 +275,8 @@ func TestGetValidToken_RefreshesExpiredToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if token.AccessToken != "refreshed-access" {
-		t.Errorf("expected refreshed access token, got: %s", token.AccessToken)
+	if token != "refreshed-access" {
+		t.Errorf("expected refreshed access token, got: %s", token)
 	}
 
 	// Verify the new token was persisted.
@@ -308,8 +306,8 @@ func TestRunOAuthFlow_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if token.AccessToken != "oauth-access" {
-		t.Errorf("expected oauth-access, got: %s", token.AccessToken)
+	if token != "oauth-access" {
+		t.Errorf("expected oauth-access, got: %s", token)
 	}
 
 	saved, err := a.loadToken()

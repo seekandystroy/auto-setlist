@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/seekandystroy/auto-setlist/internal/adapters"
 	"github.com/seekandystroy/auto-setlist/internal/core/service"
@@ -47,11 +46,11 @@ func main() {
 
 	fmt.Printf("%+v\n", artists[0])
 
-	token, err := svc.AuthWithSpotify()
+	_, err = svc.AuthWithSpotify()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Spotify token obtained (expires: %s)\n", token.ExpiresAt.Format(time.RFC3339))
+	fmt.Println("Spotify authorized successfully")
 }

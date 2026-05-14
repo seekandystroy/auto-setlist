@@ -9,20 +9,20 @@ import (
 )
 
 type mockSearcher struct {
-	result *domain.ArtistSearchResult
+	result []domain.Artist
 	err    error
 }
 
-func (m *mockSearcher) SearchArtists(name string) (*domain.ArtistSearchResult, error) {
+func (m *mockSearcher) SearchArtists(name string) ([]domain.Artist, error) {
 	return m.result, m.err
 }
 
 type mockSpotify struct {
-	token *domain.SpotifyToken
+	token string
 	err   error
 }
 
-func (m *mockSpotify) GetValidToken() (*domain.SpotifyToken, error) {
+func (m *mockSpotify) GetValidToken() (string, error) {
 	return m.token, m.err
 }
 
@@ -39,11 +39,9 @@ func TestSearchArtistsJSON_EmptyName(t *testing.T) {
 
 func TestSearchArtistsJSON_ReturnsArtists(t *testing.T) {
 	artists := []domain.Artist{
-		{MBID: "abc", Name: "Sprout", SortName: "Sprout", URL: "https://example.com"},
+		{MBID: "abc", Name: "Sprout"},
 	}
-	mock := &mockSearcher{
-		result: &domain.ArtistSearchResult{Artists: artists},
-	}
+	mock := &mockSearcher{result: artists}
 	svc := NewService(mock, &mockSpotify{})
 
 	got, err := svc.SearchArtistsJSON("Sprout")

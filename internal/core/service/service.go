@@ -8,18 +8,18 @@ import (
 )
 
 type service struct {
-	searcher ports.SetlistFm
-	spotify  ports.Spotify
+	setlistfm ports.SetlistFm
+	spotify   ports.Spotify
 }
 
 func NewService(setlistfm ports.SetlistFm, spotify ports.Spotify) *service {
-	return &service{searcher: setlistfm, spotify: spotify}
+	return &service{setlistfm: setlistfm, spotify: spotify}
 }
 
-func (s *service) AuthWithSpotify() (*domain.SpotifyToken, error) {
+func (s *service) AuthWithSpotify() (string, error) {
 	token, err := s.spotify.GetValidToken()
 	if err != nil {
-		return nil, fmt.Errorf("authenticating with Spotify: %w", err)
+		return "", fmt.Errorf("authenticating with Spotify: %w", err)
 	}
 	return token, nil
 }
@@ -29,10 +29,10 @@ func (s *service) SearchArtistsJSON(name string) ([]domain.Artist, error) {
 		return nil, fmt.Errorf("artist name must not be empty")
 	}
 
-	result, err := s.searcher.SearchArtists(name)
+	result, err := s.setlistfm.SearchArtists(name)
 	if err != nil {
 		return nil, fmt.Errorf("searching for artist %q: %w", name, err)
 	}
 
-	return result.Artists, nil
+	return result, nil
 }

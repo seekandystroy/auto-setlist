@@ -1,13 +1,9 @@
 package ports
 
-import (
-	"context"
-
-	"github.com/seekandystroy/auto-setlist/internal/core/domain"
-)
+import "context"
 
 type Spotify interface {
-	GetValidToken() (*domain.SpotifyToken, error)
+	GetValidToken() (string, error)
 }
 
 type SpotifyCallbackReceiver interface {

@@ -6,8 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
 func newTestAdapter(serverURL string) *setlistFMAdapter {
@@ -19,12 +17,12 @@ func newTestAdapter(serverURL string) *setlistFMAdapter {
 }
 
 func TestSearchArtists_HappyPath(t *testing.T) {
-	expected := domain.ArtistSearchResult{
+	expected := setlistfmSearchResult{
 		Type:         "artist",
 		ItemsPerPage: 20,
 		Page:         1,
 		Total:        1,
-		Artists: []domain.Artist{
+		Artists: []setlistfmArtist{
 			{MBID: "abc123", Name: "Sprout", SortName: "Sprout", URL: "https://example.com"},
 		},
 	}
@@ -40,11 +38,11 @@ func TestSearchArtists_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result.Artists) != 1 {
-		t.Fatalf("expected 1 artist, got %d", len(result.Artists))
+	if len(result) != 1 {
+		t.Fatalf("expected 1 artist, got %d", len(result))
 	}
-	if result.Artists[0].MBID != "abc123" {
-		t.Errorf("expected MBID %q, got %q", "abc123", result.Artists[0].MBID)
+	if result[0].MBID != "abc123" {
+		t.Errorf("expected MBID %q, got %q", "abc123", result[0].MBID)
 	}
 }
 
@@ -107,7 +105,7 @@ func TestSearchArtists_SendsCorrectHeaders(t *testing.T) {
 		gotAPIKey = r.Header.Get("x-api-key")
 		gotAccept = r.Header.Get("Accept")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(domain.ArtistSearchResult{})
+		json.NewEncoder(w).Encode(setlistfmSearchResult{})
 	}))
 	defer srv.Close()
 

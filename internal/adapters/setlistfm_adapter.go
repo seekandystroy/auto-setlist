@@ -15,6 +15,22 @@ type setlistFMAdapter struct {
 	baseURL    string
 }
 
+type setlistfmArtist struct {
+	MBID           string `json:"mbid"`
+	Name           string `json:"name"`
+	SortName       string `json:"sortName"`
+	Disambiguation string `json:"disambiguation,omitempty"`
+	URL            string `json:"url"`
+}
+
+type setlistfmSearchResult struct {
+	Type         string            `json:"type"`
+	ItemsPerPage int               `json:"itemsPerPage"`
+	Page         int               `json:"page"`
+	Total        int               `json:"total"`
+	Artists      []setlistfmArtist `json:"artist"`
+}
+
 func NewSetlistFmAdapter(apiKey string) *setlistFMAdapter {
 	return &setlistFMAdapter{
 		apiKey:     apiKey,
@@ -23,7 +39,7 @@ func NewSetlistFmAdapter(apiKey string) *setlistFMAdapter {
 	}
 }
 
-func (c *setlistFMAdapter) SearchArtists(name string) (*domain.ArtistSearchResult, error) {
+func (c *setlistFMAdapter) SearchArtists(name string) ([]domain.Artist, error) {
 	// Intentionally just getting the first page of results, artist choice later
 	endpoint := fmt.Sprintf(
 		"%s/search/artists?artistName=%s&p=1&sort=relevance",
@@ -48,10 +64,14 @@ func (c *setlistFMAdapter) SearchArtists(name string) (*domain.ArtistSearchResul
 		return nil, fmt.Errorf("setlistfm: unexpected status %d", resp.StatusCode)
 	}
 
-	var result domain.ArtistSearchResult
+	var result setlistfmSearchResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("setlistfm: decoding response: %w", err)
 	}
 
-	return &result, nil
+	artists := make([]domain.Artist, len(result.Artists))
+	for i, a := range result.Artists {
+		artists[i] = domain.Artist{MBID: a.MBID, Name: a.Name}
+	}
+	return artists, nil
 }

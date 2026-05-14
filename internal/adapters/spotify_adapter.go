@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 	"github.com/seekandystroy/auto-setlist/internal/ports"
 )
 
@@ -30,6 +29,21 @@ type spotifyAdapter struct {
 	tokenFilePath    string
 	openBrowserFn    func(string) error
 	callbackReceiver ports.SpotifyCallbackReceiver
+}
+
+type spotifyToken struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	TokenType    string    `json:"token_type"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	Scope        string    `json:"scope"`
+}
+
+func (t *spotifyToken) isValid() bool {
+	if t == nil || t.AccessToken == "" {
+		return false
+	}
+	return time.Now().Add(30 * time.Second).Before(t.ExpiresAt)
 }
 
 // spotifyTokenResponse mirrors the JSON returned by the Spotify token endpoint.
@@ -60,27 +74,31 @@ func NewSpotifyAdapter(clientID, clientSecret string, callbackReceiver ports.Spo
 }
 
 // GetValidToken returns a valid Spotify access token, refreshing or re-authorizing as needed.
-func (a *spotifyAdapter) GetValidToken() (*domain.SpotifyToken, error) {
+func (a *spotifyAdapter) GetValidToken() (string, error) {
 	token, err := a.loadToken()
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return "", err
 	}
 
-	if token != nil && token.IsValid() {
-		return token, nil
+	if token != nil && token.isValid() {
+		return token.AccessToken, nil
 	}
 
 	if token != nil && token.RefreshToken != "" {
 		refreshed, err := a.refreshAccessToken(token.RefreshToken)
 		if err == nil {
 			if saveErr := a.saveToken(refreshed); saveErr != nil {
-				return nil, saveErr
+				return "", saveErr
 			}
-			return refreshed, nil
+			return refreshed.AccessToken, nil
 		}
 	}
 
-	return a.runOAuthFlow()
+	tok, err := a.runOAuthFlow()
+	if err != nil {
+		return "", err
+	}
+	return tok.AccessToken, nil
 }
 
 func (a *spotifyAdapter) buildAuthURL(state string) string {
@@ -94,7 +112,7 @@ func (a *spotifyAdapter) buildAuthURL(state string) string {
 	return a.accountsBaseURL + "/authorize?" + params.Encode()
 }
 
-func (a *spotifyAdapter) exchangeCode(code string) (*domain.SpotifyToken, error) {
+func (a *spotifyAdapter) exchangeCode(code string) (*spotifyToken, error) {
 	body := url.Values{
 		"grant_type":   {"authorization_code"},
 		"code":         {code},
@@ -103,18 +121,17 @@ func (a *spotifyAdapter) exchangeCode(code string) (*domain.SpotifyToken, error)
 	return a.postToken(body, "")
 }
 
-func (a *spotifyAdapter) refreshAccessToken(refreshToken string) (*domain.SpotifyToken, error) {
+func (a *spotifyAdapter) refreshAccessToken(refreshToken string) (*spotifyToken, error) {
 	body := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
 	}
-	token, err := a.postToken(body, refreshToken)
-	return token, err
+	return a.postToken(body, refreshToken)
 }
 
 // postToken sends a POST to /api/token and decodes the response.
 // existingRefreshToken is used as a fallback when Spotify doesn't rotate the refresh token.
-func (a *spotifyAdapter) postToken(body url.Values, existingRefreshToken string) (*domain.SpotifyToken, error) {
+func (a *spotifyAdapter) postToken(body url.Values, existingRefreshToken string) (*spotifyToken, error) {
 	req, err := http.NewRequest(http.MethodPost, a.accountsBaseURL+"/api/token", strings.NewReader(body.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("spotify: building token request: %w", err)
@@ -144,7 +161,7 @@ func (a *spotifyAdapter) postToken(body url.Values, existingRefreshToken string)
 		refreshToken = existingRefreshToken
 	}
 
-	return &domain.SpotifyToken{
+	return &spotifyToken{
 		AccessToken:  decoded.AccessToken,
 		RefreshToken: refreshToken,
 		TokenType:    decoded.TokenType,
@@ -153,7 +170,7 @@ func (a *spotifyAdapter) postToken(body url.Values, existingRefreshToken string)
 	}, nil
 }
 
-func (a *spotifyAdapter) saveToken(token *domain.SpotifyToken) error {
+func (a *spotifyAdapter) saveToken(token *spotifyToken) error {
 	dir := filepath.Dir(a.tokenFilePath)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("spotify: creating config dir: %w", err)
@@ -172,19 +189,19 @@ func (a *spotifyAdapter) saveToken(token *domain.SpotifyToken) error {
 	return nil
 }
 
-func (a *spotifyAdapter) loadToken() (*domain.SpotifyToken, error) {
+func (a *spotifyAdapter) loadToken() (*spotifyToken, error) {
 	data, err := os.ReadFile(a.tokenFilePath)
 	if err != nil {
 		return nil, err
 	}
-	var token domain.SpotifyToken
+	var token spotifyToken
 	if err := json.Unmarshal(data, &token); err != nil {
 		return nil, fmt.Errorf("spotify: parsing token file: %w", err)
 	}
 	return &token, nil
 }
 
-func (a *spotifyAdapter) runOAuthFlow() (*domain.SpotifyToken, error) {
+func (a *spotifyAdapter) runOAuthFlow() (*spotifyToken, error) {
 	state, err := generateState()
 	if err != nil {
 		return nil, err
