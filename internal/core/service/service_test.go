@@ -26,8 +26,17 @@ func (m *mockSpotify) GetValidToken() (string, error) {
 	return m.token, m.err
 }
 
+type mockMusicbrainz struct {
+	artist *domain.Artist
+	err    error
+}
+
+func (m *mockMusicbrainz) GetArtist(mbid string) (*domain.Artist, error) {
+	return m.artist, m.err
+}
+
 func TestSearchArtistsJSON_EmptyName(t *testing.T) {
-	svc := NewService(&mockSearcher{}, &mockSpotify{})
+	svc := NewService(&mockSearcher{}, &mockSpotify{}, &mockMusicbrainz{})
 	_, err := svc.SearchArtistsJSON("")
 	if err == nil {
 		t.Fatal("expected error for empty name, got nil")
@@ -42,7 +51,7 @@ func TestSearchArtistsJSON_ReturnsArtists(t *testing.T) {
 		{MBID: "abc", Name: "Sprout"},
 	}
 	mock := &mockSearcher{result: artists}
-	svc := NewService(mock, &mockSpotify{})
+	svc := NewService(mock, &mockSpotify{}, &mockMusicbrainz{})
 
 	got, err := svc.SearchArtistsJSON("Sprout")
 	if err != nil {
@@ -59,7 +68,7 @@ func TestSearchArtistsJSON_ReturnsArtists(t *testing.T) {
 func TestSearchArtistsJSON_WrapsSearcherError(t *testing.T) {
 	underlying := errors.New("connection refused")
 	mock := &mockSearcher{err: underlying}
-	svc := NewService(mock, &mockSpotify{})
+	svc := NewService(mock, &mockSpotify{}, &mockMusicbrainz{})
 
 	_, err := svc.SearchArtistsJSON("Sprout")
 	if err == nil {

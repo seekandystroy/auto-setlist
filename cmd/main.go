@@ -36,7 +36,8 @@ func main() {
 	}
 
 	setlistFmAdapter := adapters.NewSetlistFmAdapter(apiKey)
-	svc := service.NewService(setlistFmAdapter, spotifyAdapter)
+	musicbrainzAdapter := adapters.NewMusicbrainzAdapter()
+	svc := service.NewService(setlistFmAdapter, spotifyAdapter, musicbrainzAdapter)
 
 	artists, err := svc.SearchArtistsJSON(artistName)
 	if err != nil {
@@ -44,7 +45,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("%+v\n", artists[0])
+	artist := artists[0]
+	if err := svc.FillSpotifyID(&artist); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("%+v\n", artist)
 
 	_, err = svc.AuthWithSpotify()
 	if err != nil {
