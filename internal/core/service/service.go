@@ -25,15 +25,36 @@ func (s *service) AuthWithSpotify() (string, error) {
 	return token, nil
 }
 
-func (s *service) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
-	setlists, err := s.setlistfm.GetSetlists(artist)
-	if err != nil {
-		return nil, fmt.Errorf("fetching setlists for %q: %w", artist.Name, err)
+func (s *service) GetArtistSetlists(name string) ([]domain.Setlist, error) {
+	if name == "" {
+		return nil, fmt.Errorf("artist name must not be empty")
 	}
-	return setlists, nil
+
+	artists, err := s.searchArtists(name)
+	if err != nil {
+		return nil, err
+	}
+	if len(artists) == 0 {
+		return nil, fmt.Errorf("no artist found for %q", name)
+	}
+
+	artist := artists[0]
+	if err := s.fillSpotifyID(&artist); err != nil {
+		return nil, err
+	}
+
+	return s.getSetlists(artist)
 }
 
-func (s *service) FillSpotifyID(artist *domain.Artist) error {
+func (s *service) searchArtists(name string) ([]domain.Artist, error) {
+	result, err := s.setlistfm.SearchArtists(name)
+	if err != nil {
+		return nil, fmt.Errorf("searching for artist %q: %w", name, err)
+	}
+	return result, nil
+}
+
+func (s *service) fillSpotifyID(artist *domain.Artist) error {
 	result, err := s.musicbrainz.GetArtist(artist.MBID)
 	if err != nil {
 		return fmt.Errorf("fetching artist from MusicBrainz: %w", err)
@@ -42,15 +63,10 @@ func (s *service) FillSpotifyID(artist *domain.Artist) error {
 	return nil
 }
 
-func (s *service) SearchArtistsJSON(name string) ([]domain.Artist, error) {
-	if name == "" {
-		return nil, fmt.Errorf("artist name must not be empty")
-	}
-
-	result, err := s.setlistfm.SearchArtists(name)
+func (s *service) getSetlists(artist domain.Artist) ([]domain.Setlist, error) {
+	setlists, err := s.setlistfm.GetSetlists(artist)
 	if err != nil {
-		return nil, fmt.Errorf("searching for artist %q: %w", name, err)
+		return nil, fmt.Errorf("fetching setlists for %q: %w", artist.Name, err)
 	}
-
-	return result, nil
+	return setlists, nil
 }
