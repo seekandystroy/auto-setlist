@@ -22,7 +22,7 @@ go vet ./...                # static analysis
 
 Hexagonal architecture (Ports & Adapters):
 
-- **`internal/core/domain/`** — pure structs (`Artist`, `ArtistSearchResult`), domain logic only
+- **`internal/core/domain/`** — pure structs (`Artist`, `Setlist`), domain logic only
 - **`internal/ports/`** — interfaces only; the service depends only on these, not on any concrete adapters
 - **`internal/adapters/`** — implementations of ports
 - **`internal/core/service/`** — business logic; used by main, receives adapters as dependencies
