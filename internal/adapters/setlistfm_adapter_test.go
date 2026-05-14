@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
 func newTestAdapter(serverURL string) *setlistFMAdapter {
@@ -90,6 +92,118 @@ func TestSearchArtists_MalformedJSON(t *testing.T) {
 
 	adapter := newTestAdapter(srv.URL)
 	_, err := adapter.SearchArtists("Sprout")
+	if err == nil {
+		t.Fatal("expected decode error, got nil")
+	}
+	if !strings.Contains(err.Error(), "decoding response") {
+		t.Errorf("expected 'decoding response' in error, got %q", err.Error())
+	}
+}
+
+func TestGetSetlists_HappyPath(t *testing.T) {
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{Sets: setlistfmSets{Set: []setlistfmSet{
+				{Songs: []setlistfmSong{{Name: "Song A"}, {Name: "Song B"}}},
+				{Songs: []setlistfmSong{{Name: "Encore Song"}}},
+			}}},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlists(domain.Artist{MBID: "abc123", Name: "Sprout"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 setlist, got %d", len(result))
+	}
+	if len(result[0].Tracks) != 3 {
+		t.Errorf("expected 3 tracks, got %d", len(result[0].Tracks))
+	}
+	if result[0].Tracks[0] != "Song A" {
+		t.Errorf("expected first track %q, got %q", "Song A", result[0].Tracks[0])
+	}
+	if result[0].Artist.MBID != "abc123" {
+		t.Errorf("expected artist MBID %q, got %q", "abc123", result[0].Artist.MBID)
+	}
+}
+
+func TestGetSetlists_SkipsUnnamedSongs(t *testing.T) {
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{Sets: setlistfmSets{Set: []setlistfmSet{
+				{Songs: []setlistfmSong{{Name: "Real Song"}, {Name: ""}}},
+			}}},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result[0].Tracks) != 1 {
+		t.Errorf("expected 1 track (unnamed skipped), got %d", len(result[0].Tracks))
+	}
+}
+
+func TestGetSetlists_NonOKStatus(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusInternalServerError} {
+		status := status
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer srv.Close()
+
+			adapter := newTestAdapter(srv.URL)
+			_, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+			if err == nil {
+				t.Fatalf("expected error for status %d, got nil", status)
+			}
+			if !strings.Contains(err.Error(), "unexpected status") {
+				t.Errorf("expected 'unexpected status' in error, got %q", err.Error())
+			}
+		})
+	}
+}
+
+func TestGetSetlists_NetworkError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	_, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	if err == nil {
+		t.Fatal("expected network error, got nil")
+	}
+	if !strings.Contains(err.Error(), "executing request") {
+		t.Errorf("expected 'executing request' in error, got %q", err.Error())
+	}
+}
+
+func TestGetSetlists_MalformedJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("not json {{{"))
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	_, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
 	}

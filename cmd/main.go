@@ -52,6 +52,13 @@ func main() {
 	}
 	fmt.Printf("%+v\n", artist)
 
+	setlists, err := svc.GetSetlists(artist)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("%+v\n", setlists)
+
 	_, err = svc.AuthWithSpotify()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

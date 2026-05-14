@@ -31,6 +31,26 @@ type setlistfmSearchResult struct {
 	Artists      []setlistfmArtist `json:"artist"`
 }
 
+type setlistfmSong struct {
+	Name string `json:"name"`
+}
+
+type setlistfmSet struct {
+	Songs []setlistfmSong `json:"song"`
+}
+
+type setlistfmSets struct {
+	Set []setlistfmSet `json:"set"`
+}
+
+type setlistfmSetlist struct {
+	Sets setlistfmSets `json:"sets"`
+}
+
+type setlistfmSetlistsResponse struct {
+	Setlists []setlistfmSetlist `json:"setlist"`
+}
+
 func NewSetlistFmAdapter(apiKey string) *setlistFMAdapter {
 	return &setlistFMAdapter{
 		apiKey:     apiKey,
@@ -74,4 +94,44 @@ func (c *setlistFMAdapter) SearchArtists(name string) ([]domain.Artist, error) {
 		artists[i] = domain.Artist{MBID: a.MBID, Name: a.Name}
 	}
 	return artists, nil
+}
+
+func (c *setlistFMAdapter) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
+	endpoint := fmt.Sprintf("%s/artist/%s/setlists?p=1", c.baseURL, artist.MBID)
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("setlistfm: building request: %w", err)
+	}
+	req.Header.Set("x-api-key", c.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("setlistfm: executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("setlistfm: unexpected status %d", resp.StatusCode)
+	}
+
+	var result setlistfmSetlistsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("setlistfm: decoding response: %w", err)
+	}
+
+	setlists := make([]domain.Setlist, len(result.Setlists))
+	for i, sl := range result.Setlists {
+		var tracks []string
+		for _, set := range sl.Sets.Set {
+			for _, song := range set.Songs {
+				if song.Name != "" {
+					tracks = append(tracks, song.Name)
+				}
+			}
+		}
+		setlists[i] = domain.Setlist{Artist: artist, Tracks: tracks}
+	}
+	return setlists, nil
 }

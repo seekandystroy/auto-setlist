@@ -25,6 +25,14 @@ func (s *service) AuthWithSpotify() (string, error) {
 	return token, nil
 }
 
+func (s *service) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
+	setlists, err := s.setlistfm.GetSetlists(artist)
+	if err != nil {
+		return nil, fmt.Errorf("fetching setlists for %q: %w", artist.Name, err)
+	}
+	return setlists, nil
+}
+
 func (s *service) FillSpotifyID(artist *domain.Artist) error {
 	result, err := s.musicbrainz.GetArtist(artist.MBID)
 	if err != nil {
