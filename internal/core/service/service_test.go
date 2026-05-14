@@ -39,7 +39,7 @@ func (m *mockSpotify) GetSetlistTracks(s domain.Setlist) ([]string, error) {
 	return m.uris, m.err
 }
 
-func (m *mockSpotify) CreatePlaylist(domain.Setlist) (string, error) {
+func (m *mockSpotify) CreatePlaylist(domain.Setlist, []string) (string, error) {
 	return m.playlistID, m.err
 }
 

@@ -9,7 +9,7 @@ import (
 type Spotify interface {
 	GetValidToken() (string, error)
 	GetSetlistTracks(domain.Setlist) ([]string, error)
-	CreatePlaylist(domain.Setlist) (string, error)
+	CreatePlaylist(domain.Setlist, []string) (string, error)
 }
 
 type SpotifyCallbackReceiver interface {

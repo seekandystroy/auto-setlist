@@ -522,12 +522,74 @@ func TestCreatePlaylist_HappyPath(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 	saveValidToken(t, a)
 
-	id, err := a.CreatePlaylist(setlist)
+	id, err := a.CreatePlaylist(setlist, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if id != "playlist-xyz" {
 		t.Errorf("expected playlist ID %q, got %q", "playlist-xyz", id)
+	}
+}
+
+func TestCreatePlaylist_AddsTracksToPlaylist(t *testing.T) {
+	setlist := domain.Setlist{Artist: domain.Artist{Name: "Pitbull"}}
+	uris := []string{"spotify:track:a", "spotify:track:b"}
+	var gotAddBody spotifyAddItemsRequest
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/me/playlists" {
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(spotifyPlaylist{ID: "playlist-xyz"})
+		} else {
+			json.NewDecoder(r.Body).Decode(&gotAddBody)
+			w.WriteHeader(http.StatusCreated)
+		}
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	_, err := a.CreatePlaylist(setlist, uris)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(gotAddBody.URIs) != 2 {
+		t.Fatalf("expected 2 URIs in add-items body, got %d", len(gotAddBody.URIs))
+	}
+	if gotAddBody.URIs[0] != "spotify:track:a" {
+		t.Errorf("unexpected first URI: %s", gotAddBody.URIs[0])
+	}
+	if gotAddBody.Position != 0 {
+		t.Errorf("expected position 0, got %d", gotAddBody.Position)
+	}
+}
+
+func TestCreatePlaylist_AddTracksNonOKStatus(t *testing.T) {
+	setlist := domain.Setlist{Artist: domain.Artist{Name: "Pitbull"}}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/me/playlists" {
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(spotifyPlaylist{ID: "playlist-xyz"})
+		} else {
+			w.WriteHeader(http.StatusForbidden)
+		}
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	saveValidToken(t, a)
+
+	_, err := a.CreatePlaylist(setlist, []string{"spotify:track:a"})
+	if err == nil {
+		t.Fatal("expected error from add items, got nil")
+	}
+	if !strings.Contains(err.Error(), "unexpected status") {
+		t.Errorf("expected 'unexpected status' in error, got %q", err.Error())
 	}
 }
 
@@ -546,9 +608,9 @@ func TestCreatePlaylist_PlaylistName(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 	saveValidToken(t, a)
 
-	a.CreatePlaylist(setlist)
+	a.CreatePlaylist(setlist, nil)
 
-	wantName := "Pitbull setlist by auto-playlist"
+	wantName := "Pitbull setlist by auto-setlist"
 	if gotBody.Name != wantName {
 		t.Errorf("expected name %q, got %q", wantName, gotBody.Name)
 	}
@@ -572,7 +634,7 @@ func TestCreatePlaylist_SendsCorrectHeaders(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 	saveValidToken(t, a)
 
-	a.CreatePlaylist(domain.Setlist{})
+	a.CreatePlaylist(domain.Setlist{}, nil)
 
 	if !strings.HasPrefix(gotAuth, "Bearer ") {
 		t.Errorf("expected Bearer auth, got: %s", gotAuth)
@@ -592,7 +654,7 @@ func TestCreatePlaylist_NonOKStatus(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 	saveValidToken(t, a)
 
-	_, err := a.CreatePlaylist(domain.Setlist{})
+	_, err := a.CreatePlaylist(domain.Setlist{}, nil)
 	if err == nil {
 		t.Fatal("expected error for non-201 status, got nil")
 	}
@@ -612,7 +674,7 @@ func TestCreatePlaylist_MalformedJSON(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 	saveValidToken(t, a)
 
-	_, err := a.CreatePlaylist(domain.Setlist{})
+	_, err := a.CreatePlaylist(domain.Setlist{}, nil)
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
 	}

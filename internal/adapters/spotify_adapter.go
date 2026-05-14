@@ -55,6 +55,11 @@ type spotifyCreatePlaylistRequest struct {
 	Description string `json:"description"`
 }
 
+type spotifyAddItemsRequest struct {
+	URIs     []string `json:"uris"`
+	Position int      `json:"position"`
+}
+
 type spotifyPlaylist struct {
 	ID string `json:"id"`
 }
@@ -149,14 +154,14 @@ func (a *spotifyAdapter) GetSetlistTracks(setlist domain.Setlist) ([]string, err
 	return uris, nil
 }
 
-func (a *spotifyAdapter) CreatePlaylist(setlist domain.Setlist) (string, error) {
+func (a *spotifyAdapter) CreatePlaylist(setlist domain.Setlist, uris []string) (string, error) {
 	token, err := a.GetValidToken()
 	if err != nil {
 		return "", fmt.Errorf("spotify: getting token: %w", err)
 	}
 
 	body := spotifyCreatePlaylistRequest{
-		Name:        fmt.Sprintf("%s setlist by auto-playlist", setlist.Artist.Name),
+		Name:        fmt.Sprintf("%s setlist by auto-setlist", setlist.Artist.Name),
 		Description: "auto-generated",
 	}
 	data, err := json.Marshal(body)
@@ -186,7 +191,39 @@ func (a *spotifyAdapter) CreatePlaylist(setlist domain.Setlist) (string, error) 
 		return "", fmt.Errorf("spotify: decoding create playlist response: %w", err)
 	}
 
+	if len(uris) > 0 {
+		if err := a.addTracksToPlaylist(token, playlist.ID, uris); err != nil {
+			return "", err
+		}
+	}
+
 	return playlist.ID, nil
+}
+
+func (a *spotifyAdapter) addTracksToPlaylist(token, playlistID string, uris []string) error {
+	body := spotifyAddItemsRequest{URIs: uris, Position: 0}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("spotify: marshalling add items request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, a.apiBaseURL+"/playlists/"+playlistID+"/items", bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("spotify: building add items request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("spotify: executing add items request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("spotify: unexpected status %d from add items", resp.StatusCode)
+	}
+	return nil
 }
 
 func (a *spotifyAdapter) searchTrack(token, trackName string, artist domain.Artist) (string, bool, error) {

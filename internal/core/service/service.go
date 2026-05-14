@@ -61,7 +61,7 @@ func (s *service) SetlistToPlaylist(name string) (string, []string, error) {
 		return "", nil, err
 	}
 
-	playlistID, err := s.spotify.CreatePlaylist(*setlist)
+	playlistID, err := s.spotify.CreatePlaylist(*setlist, uris)
 	if err != nil {
 		return "", nil, err
 	}
