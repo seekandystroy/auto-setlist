@@ -5,7 +5,19 @@ Starting as a CLI-only tool that fetches the latest setlist for a given artist, 
 
 Learning Go with Claude's help, while being opinionated about architecture, concurrency and maintainability.
 
-## MVP
+## Usage
+
+### Pre-conditions
+1. SetlistFM API key
+2. Spotify client credentials
+
+### Building and running
+
+1. `go build ./..`
+2. `export SETLISTFM_API_KEY=YOURKEY SPOTIFY_CLIENT_ID=YOURKEY SPOTIFY_CLIENT_SECRET=YOURKEY`
+3. `go run ./cmd BANDNAME`
+
+## MVP (current)
 1. CLI-only
 1. Get the first artist found on SetlistFM
 2. Get that artist's most recent setlist
