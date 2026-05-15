@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
@@ -15,6 +16,7 @@ func newTestAdapter(serverURL string) *setlistfmAdapter {
 		apiKey:     "test-key",
 		httpClient: &http.Client{},
 		baseURL:    serverURL,
+		sleepFn:    func(time.Duration) {},
 	}
 }
 
@@ -209,6 +211,83 @@ func TestGetSetlists_MalformedJSON(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "decoding response") {
 		t.Errorf("expected 'decoding response' in error, got %q", err.Error())
+	}
+}
+
+func TestGetSetlists_RetriesOnFailureThenSucceeds(t *testing.T) {
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{Sets: setlistfmSets{Set: []setlistfmSet{
+				{Songs: []setlistfmSong{{Name: "Song A"}}},
+			}}},
+		},
+	}
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts, got %d", attempts)
+	}
+	if len(result[0].Tracks) != 1 || result[0].Tracks[0] != "Song A" {
+		t.Errorf("unexpected result: %+v", result)
+	}
+}
+
+func TestGetSetlists_ExhaustsAllRetries(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	_, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	if err == nil {
+		t.Fatal("expected error after exhausting retries, got nil")
+	}
+	if attempts != 4 {
+		t.Errorf("expected 4 total attempts (1 + 3 retries), got %d", attempts)
+	}
+	if !strings.Contains(err.Error(), "unexpected status") {
+		t.Errorf("expected 'unexpected status' in error, got %q", err.Error())
+	}
+}
+
+func TestGetSetlists_SleepDurationsAreExponential(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	var slept []time.Duration
+	adapter := newTestAdapter(srv.URL)
+	adapter.sleepFn = func(d time.Duration) { slept = append(slept, d) }
+
+	adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+
+	expected := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
+	if len(slept) != len(expected) {
+		t.Fatalf("expected %d sleeps, got %d", len(expected), len(slept))
+	}
+	for i, d := range expected {
+		if slept[i] != d {
+			t.Errorf("sleep[%d]: expected %v, got %v", i, d, slept[i])
+		}
 	}
 }
 

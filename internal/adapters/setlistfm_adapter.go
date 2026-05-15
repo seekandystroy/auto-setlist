@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
@@ -14,6 +15,7 @@ type setlistfmAdapter struct {
 	apiKey     string
 	httpClient *http.Client
 	baseURL    string
+	sleepFn    func(time.Duration)
 }
 
 type setlistfmArtist struct {
@@ -57,6 +59,7 @@ func NewSetlistfmAdapter(apiKey string) *setlistfmAdapter {
 		apiKey:     apiKey,
 		httpClient: &http.Client{},
 		baseURL:    "https://api.setlist.fm/rest/1.0",
+		sleepFn:    time.Sleep,
 	}
 }
 
@@ -102,39 +105,55 @@ func (c *setlistfmAdapter) GetSetlists(artist domain.Artist) ([]domain.Setlist, 
 	slog.Info("Getting setlists from SetlistFM", "artist", artist.Name)
 	endpoint := fmt.Sprintf("%s/artist/%s/setlists?p=1", c.baseURL, artist.MBID)
 
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("setlistfm: building request: %w", err)
-	}
-	req.Header.Set("x-api-key", c.apiKey)
-	req.Header.Set("Accept", "application/json")
+	var lastErr error
+	wait := time.Second
+	for attempt := range 4 {
+		if attempt > 0 {
+			slog.Warn("GET setlists got error, waiting and retrying", "wait", wait)
+			c.sleepFn(wait)
+			wait *= 2
+		}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("setlistfm: executing request: %w", err)
-	}
-	defer resp.Body.Close()
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("setlistfm: building request: %w", err)
+		}
+		req.Header.Set("x-api-key", c.apiKey)
+		req.Header.Set("Accept", "application/json")
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("setlistfm: unexpected status %d", resp.StatusCode)
-	}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("setlistfm: executing request: %w", err)
+			continue
+		}
 
-	var result setlistfmSetlistsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("setlistfm: decoding response: %w", err)
-	}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("setlistfm: unexpected status %d", resp.StatusCode)
+			continue
+		}
 
-	setlists := make([]domain.Setlist, len(result.Setlists))
-	for i, sl := range result.Setlists {
-		var tracks []string
-		for _, set := range sl.Sets.Set {
-			for _, song := range set.Songs {
-				if song.Name != "" {
-					tracks = append(tracks, song.Name)
+		var result setlistfmSetlistsResponse
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("setlistfm: decoding response: %w", err)
+		}
+
+		setlists := make([]domain.Setlist, len(result.Setlists))
+		for i, sl := range result.Setlists {
+			var tracks []string
+			for _, set := range sl.Sets.Set {
+				for _, song := range set.Songs {
+					if song.Name != "" {
+						tracks = append(tracks, song.Name)
+					}
 				}
 			}
+			setlists[i] = domain.Setlist{Artist: artist, Tracks: tracks}
 		}
-		setlists[i] = domain.Setlist{Artist: artist, Tracks: tracks}
+		return setlists, nil
 	}
-	return setlists, nil
+
+	return nil, lastErr
 }
