@@ -41,10 +41,10 @@ func main() {
 		adapters.NewMusicbrainzAdapter(),
 	)
 
-	playlistID, uris, err := svc.SetlistToPlaylist(artistName)
+	playlistID, err := svc.SetlistToPlaylist(artistName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("playlist: %s\ntracks: %+v\n", playlistID, uris)
+	fmt.Printf("Playlist created: https://open.spotify.com/playlist/%s\n", playlistID)
 }

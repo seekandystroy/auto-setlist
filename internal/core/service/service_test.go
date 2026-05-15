@@ -68,18 +68,12 @@ func TestGetArtistSetlists_HappyPath(t *testing.T) {
 		&mockSpotify{uris: expectedURIs, playlistID: "playlist-abc"},
 	)
 
-	playlistID, got, err := svc.SetlistToPlaylist("Sprout")
+	playlistID, err := svc.SetlistToPlaylist("Sprout")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if playlistID != "playlist-abc" {
 		t.Errorf("unexpected playlist ID: %s", playlistID)
-	}
-	if len(got) != 2 {
-		t.Fatalf("expected 2 URIs, got %d", len(got))
-	}
-	if got[0] != "spotify:track:uri1" {
-		t.Errorf("unexpected first URI: %s", got[0])
 	}
 }
 
@@ -99,12 +93,9 @@ func TestGetArtistSetlists_SkipsEmptySetlists(t *testing.T) {
 		spotify,
 	)
 
-	_, got, err := svc.SetlistToPlaylist("Sprout")
+	_, err := svc.SetlistToPlaylist("Sprout")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("expected 1 URI, got %d", len(got))
 	}
 	if len(spotify.receivedSetlist.Tracks) != 2 {
 		t.Errorf("expected third setlist (2 tracks) to be used, got %d tracks", len(spotify.receivedSetlist.Tracks))
@@ -117,7 +108,7 @@ func TestGetArtistSetlists_SkipsEmptySetlists(t *testing.T) {
 func TestGetArtistSetlists_EmptyName(t *testing.T) {
 	svc := newSvc(&mockSetlistfm{}, &mockMusicbrainz{}, &mockSpotify{})
 
-	_, _, err := svc.SetlistToPlaylist("")
+	_, err := svc.SetlistToPlaylist("")
 	if err == nil {
 		t.Fatal("expected error for empty name, got nil")
 	}
@@ -129,7 +120,7 @@ func TestGetArtistSetlists_EmptyName(t *testing.T) {
 func TestGetArtistSetlists_NoArtistsFound(t *testing.T) {
 	svc := newSvc(&mockSetlistfm{result: []domain.Artist{}}, &mockMusicbrainz{}, &mockSpotify{})
 
-	_, _, err := svc.SetlistToPlaylist("Ghost")
+	_, err := svc.SetlistToPlaylist("Ghost")
 	if err == nil {
 		t.Fatal("expected error for empty results, got nil")
 	}
@@ -143,7 +134,7 @@ func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {
 		&mockSpotify{},
 	)
 
-	_, _, err := svc.SetlistToPlaylist("Sprout")
+	_, err := svc.SetlistToPlaylist("Sprout")
 	if err == nil {
 		t.Fatal("expected error for empty setlists, got nil")
 	}
@@ -153,7 +144,7 @@ func TestGetArtistSetlists_SearchError(t *testing.T) {
 	underlying := errors.New("network failure")
 	svc := newSvc(&mockSetlistfm{searchErr: underlying}, &mockMusicbrainz{}, &mockSpotify{})
 
-	_, _, err := svc.SetlistToPlaylist("Sprout")
+	_, err := svc.SetlistToPlaylist("Sprout")
 	if !errors.Is(err, underlying) {
 		t.Errorf("expected wrapped search error, got %v", err)
 	}
@@ -167,7 +158,7 @@ func TestGetArtistSetlists_MusicbrainzError(t *testing.T) {
 		&mockSpotify{},
 	)
 
-	_, _, err := svc.SetlistToPlaylist("Sprout")
+	_, err := svc.SetlistToPlaylist("Sprout")
 	if !errors.Is(err, underlying) {
 		t.Errorf("expected wrapped musicbrainz error, got %v", err)
 	}
@@ -182,7 +173,7 @@ func TestGetArtistSetlists_SetlistsError(t *testing.T) {
 		&mockSpotify{},
 	)
 
-	_, _, err := svc.SetlistToPlaylist("Sprout")
+	_, err := svc.SetlistToPlaylist("Sprout")
 	if !errors.Is(err, underlying) {
 		t.Errorf("expected wrapped setlists error, got %v", err)
 	}
@@ -198,7 +189,7 @@ func TestGetArtistSetlists_SpotifyError(t *testing.T) {
 		&mockSpotify{err: underlying},
 	)
 
-	_, _, err := svc.SetlistToPlaylist("Sprout")
+	_, err := svc.SetlistToPlaylist("Sprout")
 	if !errors.Is(err, underlying) {
 		t.Errorf("expected wrapped spotify error, got %v", err)
 	}
