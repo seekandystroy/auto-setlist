@@ -7,18 +7,18 @@ import (
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
-type mockSearcher struct {
+type mockSetlistfm struct {
 	result      []domain.Artist
 	searchErr   error
 	setlists    []domain.Setlist
 	setlistsErr error
 }
 
-func (m *mockSearcher) SearchArtists(name string) ([]domain.Artist, error) {
+func (m *mockSetlistfm) SearchArtists(name string) ([]domain.Artist, error) {
 	return m.result, m.searchErr
 }
 
-func (m *mockSearcher) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
+func (m *mockSetlistfm) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
 	return m.setlists, m.setlistsErr
 }
 
@@ -52,8 +52,8 @@ func (m *mockMusicbrainz) GetArtist(mbid string) (*domain.Artist, error) {
 	return m.artist, m.err
 }
 
-func newSvc(searcher *mockSearcher, mb *mockMusicbrainz, spotify *mockSpotify) *service {
-	return NewService(searcher, spotify, mb)
+func newSvc(setlistfm *mockSetlistfm, mb *mockMusicbrainz, spotify *mockSpotify) *service {
+	return NewService(setlistfm, spotify, mb)
 }
 
 func TestGetArtistSetlists_HappyPath(t *testing.T) {
@@ -63,7 +63,7 @@ func TestGetArtistSetlists_HappyPath(t *testing.T) {
 	expectedURIs := []string{"spotify:track:uri1", "spotify:track:uri2"}
 
 	svc := newSvc(
-		&mockSearcher{result: []domain.Artist{artist}, setlists: setlists},
+		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
 		&mockMusicbrainz{artist: &enriched},
 		&mockSpotify{uris: expectedURIs, playlistID: "playlist-abc"},
 	)
@@ -94,7 +94,7 @@ func TestGetArtistSetlists_SkipsEmptySetlists(t *testing.T) {
 	spotify := &mockSpotify{uris: []string{"spotify:track:uri1"}}
 
 	svc := newSvc(
-		&mockSearcher{result: []domain.Artist{artist}, setlists: setlists},
+		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
 		&mockMusicbrainz{artist: &artist},
 		spotify,
 	)
@@ -115,7 +115,7 @@ func TestGetArtistSetlists_SkipsEmptySetlists(t *testing.T) {
 }
 
 func TestGetArtistSetlists_EmptyName(t *testing.T) {
-	svc := newSvc(&mockSearcher{}, &mockMusicbrainz{}, &mockSpotify{})
+	svc := newSvc(&mockSetlistfm{}, &mockMusicbrainz{}, &mockSpotify{})
 
 	_, _, err := svc.SetlistToPlaylist("")
 	if err == nil {
@@ -127,7 +127,7 @@ func TestGetArtistSetlists_EmptyName(t *testing.T) {
 }
 
 func TestGetArtistSetlists_NoArtistsFound(t *testing.T) {
-	svc := newSvc(&mockSearcher{result: []domain.Artist{}}, &mockMusicbrainz{}, &mockSpotify{})
+	svc := newSvc(&mockSetlistfm{result: []domain.Artist{}}, &mockMusicbrainz{}, &mockSpotify{})
 
 	_, _, err := svc.SetlistToPlaylist("Ghost")
 	if err == nil {
@@ -138,7 +138,7 @@ func TestGetArtistSetlists_NoArtistsFound(t *testing.T) {
 func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {
 	artist := domain.Artist{MBID: "abc", Name: "Sprout"}
 	svc := newSvc(
-		&mockSearcher{result: []domain.Artist{artist}, setlists: []domain.Setlist{}},
+		&mockSetlistfm{result: []domain.Artist{artist}, setlists: []domain.Setlist{}},
 		&mockMusicbrainz{artist: &artist},
 		&mockSpotify{},
 	)
@@ -151,7 +151,7 @@ func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {
 
 func TestGetArtistSetlists_SearchError(t *testing.T) {
 	underlying := errors.New("network failure")
-	svc := newSvc(&mockSearcher{searchErr: underlying}, &mockMusicbrainz{}, &mockSpotify{})
+	svc := newSvc(&mockSetlistfm{searchErr: underlying}, &mockMusicbrainz{}, &mockSpotify{})
 
 	_, _, err := svc.SetlistToPlaylist("Sprout")
 	if !errors.Is(err, underlying) {
@@ -162,7 +162,7 @@ func TestGetArtistSetlists_SearchError(t *testing.T) {
 func TestGetArtistSetlists_MusicbrainzError(t *testing.T) {
 	underlying := errors.New("mbz down")
 	svc := newSvc(
-		&mockSearcher{result: []domain.Artist{{MBID: "abc", Name: "Sprout"}}},
+		&mockSetlistfm{result: []domain.Artist{{MBID: "abc", Name: "Sprout"}}},
 		&mockMusicbrainz{err: underlying},
 		&mockSpotify{},
 	)
@@ -177,7 +177,7 @@ func TestGetArtistSetlists_SetlistsError(t *testing.T) {
 	underlying := errors.New("setlists unavailable")
 	artist := domain.Artist{MBID: "abc", Name: "Sprout"}
 	svc := newSvc(
-		&mockSearcher{result: []domain.Artist{artist}, setlistsErr: underlying},
+		&mockSetlistfm{result: []domain.Artist{artist}, setlistsErr: underlying},
 		&mockMusicbrainz{artist: &artist},
 		&mockSpotify{},
 	)
@@ -193,7 +193,7 @@ func TestGetArtistSetlists_SpotifyError(t *testing.T) {
 	artist := domain.Artist{MBID: "abc", Name: "Sprout"}
 	setlists := []domain.Setlist{{Artist: artist, Tracks: []string{"Song A"}}}
 	svc := newSvc(
-		&mockSearcher{result: []domain.Artist{artist}, setlists: setlists},
+		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
 		&mockMusicbrainz{artist: &artist},
 		&mockSpotify{err: underlying},
 	)
