@@ -3,6 +3,7 @@ package adapters
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -60,6 +61,7 @@ func NewSetlistfmAdapter(apiKey string) *setlistfmAdapter {
 }
 
 func (c *setlistfmAdapter) SearchArtists(name string) ([]domain.Artist, error) {
+	slog.Info("Searching for artist on SetlistFM", "name", name)
 	// Intentionally just getting the first page of results, artist choice later
 	endpoint := fmt.Sprintf(
 		"%s/search/artists?artistName=%s&p=1&sort=relevance",
@@ -97,6 +99,7 @@ func (c *setlistfmAdapter) SearchArtists(name string) ([]domain.Artist, error) {
 }
 
 func (c *setlistfmAdapter) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
+	slog.Info("Getting setlists from SetlistFM", "artist", artist.Name)
 	endpoint := fmt.Sprintf("%s/artist/%s/setlists?p=1", c.baseURL, artist.MBID)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)

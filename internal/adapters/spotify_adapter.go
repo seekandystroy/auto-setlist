@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -119,6 +120,7 @@ func (a *spotifyAdapter) GetValidToken() (string, error) {
 	}
 
 	if token != nil && token.RefreshToken != "" {
+		slog.Info("Invalid token found, refreshing authentication with Spotify")
 		refreshed, err := a.refreshAccessToken(token.RefreshToken)
 		if err == nil {
 			if saveErr := a.saveToken(refreshed); saveErr != nil {
@@ -128,6 +130,7 @@ func (a *spotifyAdapter) GetValidToken() (string, error) {
 		}
 	}
 
+	slog.Info("No token found, authenticating with Spotify")
 	tok, err := a.runOAuthFlow()
 	if err != nil {
 		return "", err
@@ -136,6 +139,7 @@ func (a *spotifyAdapter) GetValidToken() (string, error) {
 }
 
 func (a *spotifyAdapter) GetSetlistTracks(setlist domain.Setlist) ([]string, error) {
+	slog.Info("Searching for tracks on Spotify", "count", len(setlist.Tracks))
 	token, err := a.GetValidToken()
 	if err != nil {
 		return nil, fmt.Errorf("spotify: getting token: %w", err)
@@ -155,6 +159,7 @@ func (a *spotifyAdapter) GetSetlistTracks(setlist domain.Setlist) ([]string, err
 }
 
 func (a *spotifyAdapter) CreatePlaylist(setlist domain.Setlist, uris []string) (string, error) {
+	slog.Info("Creating playlist on Spotify", "artist", setlist.Artist.Name)
 	token, err := a.GetValidToken()
 	if err != nil {
 		return "", fmt.Errorf("spotify: getting token: %w", err)
