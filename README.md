@@ -23,8 +23,12 @@ Learning Go with Claude's help, while being opinionated about architecture, conc
 2. Get that artist's most recent setlist
 3. Create a setlist on the user's Spotify account with that setlist's songs
 
-## Later (in no order of priority)
-- Artist choice
-- Aggregate of setlists
-- UI
-- Cloud deployment
+## Next
+1. UI
+2. Deployment
+
+## Later
+1. Support covers
+2. Festival mode (create a setlist with top tracks from bands attending a festival)
+3. Aggregate of top setlists
+4. Artist choice
