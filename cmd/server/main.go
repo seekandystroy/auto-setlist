@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"mime"
 	"net/http"
 	"os"
 
@@ -36,13 +37,23 @@ func main() {
 		adapters.NewMusicbrainzAdapter(),
 	)
 
+	mime.AddExtensionType(".js", "application/javascript")
+
 	mux := http.NewServeMux()
 	mux.Handle("POST /setlistjob", adapters.NewAPIAdapter(svc))
+	mux.Handle("/", http.FileServer(http.Dir("static")))
 
-	addr := ":3000"
-	slog.Info("server starting", "addr", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	port := getEnvWithFallback("PORT", "3000")
+	slog.Info("server starting", "port", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
+}
+
+func getEnvWithFallback(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }

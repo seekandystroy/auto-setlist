@@ -15,7 +15,7 @@ Learning Go with Claude's help, while being opinionated about architecture, conc
 
 1. `go build ./..`
 2. `export SETLISTFM_API_KEY=YOURKEY SPOTIFY_CLIENT_ID=YOURKEY SPOTIFY_CLIENT_SECRET=YOURKEY`
-3. `go run ./cmd BANDNAME`
+3. `go run ./cmd/cli BANDNAME` OR `go run ./cmd/server` and open `localhost:3000` on the browser.
 
 ## MVP (current)
 1. CLI-only
@@ -23,9 +23,11 @@ Learning Go with Claude's help, while being opinionated about architecture, conc
 2. Get that artist's most recent setlist
 3. Create a setlist on the user's Spotify account with that setlist's songs
 
-## Next
+## WIP
 1. UI
-2. Deployment
+
+## Next
+1. Deployment
 
 ## Later
 1. Support covers
