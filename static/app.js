@@ -98,13 +98,21 @@ async function init() {
 
 connectBtn.addEventListener('click', () => redirectToAuthCodeFlow());
 
+let requestCompleted = false;
+
 input.addEventListener('input', () => {
+  if (requestCompleted) {
+    requestCompleted = false;
+    submitBtn.textContent = 'Create Playlist';
+    result.innerHTML = '';
+  }
   submitBtn.disabled = input.value.trim() === '';
 });
 
 submitBtn.addEventListener('click', async () => {
   result.innerHTML = '';
   submitBtn.disabled = true;
+  submitBtn.classList.add('is-loading');
   try {
     const resp = await fetch('/setlistjob', {
       method: 'POST',
@@ -116,14 +124,20 @@ submitBtn.addEventListener('click', async () => {
     });
     const data = await resp.json();
     if (!resp.ok) {
+      requestCompleted = true;
       result.innerHTML = `<div class="notification is-danger">${data.error || resp.statusText}</div>`;
     } else {
-      result.innerHTML = `<div class="notification is-success">Playlist created: <a href="${data.playlist_url}" target="_blank">${data.playlist_url}</a></div>`;
+      requestCompleted = true;
+      submitBtn.textContent = 'Created!';
+      submitBtn.disabled = true;
+      result.innerHTML = `<a href="${data.playlist_url}" class="button is-primary is-rounded" target="_blank">Listen on Spotify</a>`;
     }
   } catch (err) {
+    requestCompleted = true;
     result.innerHTML = `<div class="notification is-danger">${err.message}</div>`;
   } finally {
-    submitBtn.disabled = input.value.trim() === '';
+    submitBtn.classList.remove('is-loading');
+    if (submitBtn.textContent !== 'Created!') submitBtn.disabled = input.value.trim() === '';
   }
 });
 
