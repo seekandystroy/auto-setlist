@@ -352,15 +352,6 @@ func TestBuildAuthURL_ContainsRequiredParams(t *testing.T) {
 	}
 }
 
-// saveValidToken pre-populates a valid cached token so GetValidToken returns immediately.
-func saveValidToken(t *testing.T, a *spotifyAdapter) {
-	t.Helper()
-	tok := &spotifyToken{AccessToken: "test-access-token", ExpiresAt: time.Now().Add(time.Hour)}
-	if err := a.saveToken(tok); err != nil {
-		t.Fatalf("saveValidToken: %v", err)
-	}
-}
-
 func makeSearchResponse(name, uri, artistID string) spotifySearchResponse {
 	return spotifySearchResponse{Tracks: struct {
 		Items []spotifySearchTrack `json:"items"`
@@ -390,9 +381,8 @@ func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	uris, err := a.GetSetlistTracks(setlist)
+	uris, err := a.GetSetlistTracks("test-token", setlist)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -423,9 +413,8 @@ func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	uris, err := a.GetSetlistTracks(setlist)
+	uris, err := a.GetSetlistTracks("test-token", setlist)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -449,9 +438,8 @@ func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	uris, err := a.GetSetlistTracks(setlist)
+	uris, err := a.GetSetlistTracks("test-token", setlist)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -473,9 +461,8 @@ func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	_, err := a.GetSetlistTracks(setlist)
+	_, err := a.GetSetlistTracks("test-token", setlist)
 	if err == nil {
 		t.Fatal("expected error for non-OK status, got nil")
 	}
@@ -496,9 +483,8 @@ func TestGetSetlistTracks_SendsBearerToken(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	a.GetSetlistTracks(domain.Setlist{Tracks: []string{"Song"}})
+	a.GetSetlistTracks("test-access-token", domain.Setlist{Tracks: []string{"Song"}})
 
 	if !strings.HasPrefix(gotAuth, "Bearer ") {
 		t.Errorf("expected Bearer token, got: %s", gotAuth)
@@ -520,9 +506,8 @@ func TestCreatePlaylist_HappyPath(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	id, err := a.CreatePlaylist(setlist, nil)
+	id, err := a.CreatePlaylist("test-token", setlist, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -550,9 +535,8 @@ func TestCreatePlaylist_AddsTracksToPlaylist(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	_, err := a.CreatePlaylist(setlist, uris)
+	_, err := a.CreatePlaylist("test-token", setlist, uris)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -582,9 +566,8 @@ func TestCreatePlaylist_AddTracksNonOKStatus(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	_, err := a.CreatePlaylist(setlist, []string{"spotify:track:a"})
+	_, err := a.CreatePlaylist("test-token", setlist, []string{"spotify:track:a"})
 	if err == nil {
 		t.Fatal("expected error from add items, got nil")
 	}
@@ -606,9 +589,8 @@ func TestCreatePlaylist_PlaylistName(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	a.CreatePlaylist(setlist, nil)
+	a.CreatePlaylist("test-token", setlist, nil)
 
 	wantName := "Pitbull setlist by auto-setlist"
 	if gotBody.Name != wantName {
@@ -632,12 +614,14 @@ func TestCreatePlaylist_SendsCorrectHeaders(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	a.CreatePlaylist(domain.Setlist{}, nil)
+	a.CreatePlaylist("test-access-token", domain.Setlist{}, nil)
 
 	if !strings.HasPrefix(gotAuth, "Bearer ") {
 		t.Errorf("expected Bearer auth, got: %s", gotAuth)
+	}
+	if !strings.Contains(gotAuth, "test-access-token") {
+		t.Errorf("expected access token in header, got: %s", gotAuth)
 	}
 	if gotContentType != "application/json" {
 		t.Errorf("expected Content-Type application/json, got: %s", gotContentType)
@@ -652,9 +636,8 @@ func TestCreatePlaylist_NonOKStatus(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	_, err := a.CreatePlaylist(domain.Setlist{}, nil)
+	_, err := a.CreatePlaylist("test-token", domain.Setlist{}, nil)
 	if err == nil {
 		t.Fatal("expected error for non-201 status, got nil")
 	}
@@ -672,13 +655,53 @@ func TestCreatePlaylist_MalformedJSON(t *testing.T) {
 
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
-	saveValidToken(t, a)
 
-	_, err := a.CreatePlaylist(domain.Setlist{}, nil)
+	_, err := a.CreatePlaylist("test-token", domain.Setlist{}, nil)
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
 	}
 	if !strings.Contains(err.Error(), "decoding create playlist response") {
 		t.Errorf("expected 'decoding create playlist response' in error, got %q", err.Error())
+	}
+}
+
+func TestGetSetlistTracks_401InvalidToken(t *testing.T) {
+	setlist := domain.Setlist{
+		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Tracks: []string{"Song"},
+	}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	_, err := a.GetSetlistTracks("expired-token", setlist)
+	if err == nil {
+		t.Fatal("expected error for 401, got nil")
+	}
+	if !strings.Contains(err.Error(), "401") {
+		t.Errorf("expected error to mention 401, got %q", err.Error())
+	}
+}
+
+func TestCreatePlaylist_401InvalidToken(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	_, err := a.CreatePlaylist("expired-token", domain.Setlist{}, nil)
+	if err == nil {
+		t.Fatal("expected error for 401, got nil")
+	}
+	if !strings.Contains(err.Error(), "401") {
+		t.Errorf("expected error to mention 401, got %q", err.Error())
 	}
 }

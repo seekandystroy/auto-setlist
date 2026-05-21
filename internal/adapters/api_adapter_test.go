@@ -18,7 +18,20 @@ func (m *mockSetlistService) SetlistToPlaylist(artist string) (string, error) {
 	return m.playlistID, m.err
 }
 
+func (m *mockSetlistService) SetlistToPlaylistAuthed(artist, token string) (string, error) {
+	return m.playlistID, m.err
+}
+
 func post(handler http.Handler, body string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(http.MethodPost, "/setlistjob", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Autosetlist-Spotify-Token", "test-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	return w
+}
+
+func postNoToken(handler http.Handler, body string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(http.MethodPost, "/setlistjob", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -127,5 +140,21 @@ func TestSetlistJob_UnknownPath(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestSetlistJob_MissingSpotifyToken(t *testing.T) {
+	handler := NewAPIAdapter(&mockSetlistService{playlistID: "abc123"})
+	w := postNoToken(handler, `{"artist":"Radiohead"}`)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("could not decode response: %v", err)
+	}
+	if !strings.Contains(body["error"], "Autosetlist-Spotify-Token") {
+		t.Errorf("expected error to mention header name, got: %q", body["error"])
 	}
 }

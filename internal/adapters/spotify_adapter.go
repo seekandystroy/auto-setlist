@@ -138,13 +138,8 @@ func (a *spotifyAdapter) GetValidToken() (string, error) {
 	return tok.AccessToken, nil
 }
 
-func (a *spotifyAdapter) GetSetlistTracks(setlist domain.Setlist) ([]string, error) {
+func (a *spotifyAdapter) GetSetlistTracks(token string, setlist domain.Setlist) ([]string, error) {
 	slog.Info("Searching for tracks on Spotify", "count", len(setlist.Tracks))
-	token, err := a.GetValidToken()
-	if err != nil {
-		return nil, fmt.Errorf("spotify: getting token: %w", err)
-	}
-
 	var uris []string
 	for _, trackName := range setlist.Tracks {
 		uri, found, err := a.searchTrack(token, trackName, setlist.Artist)
@@ -158,12 +153,8 @@ func (a *spotifyAdapter) GetSetlistTracks(setlist domain.Setlist) ([]string, err
 	return uris, nil
 }
 
-func (a *spotifyAdapter) CreatePlaylist(setlist domain.Setlist, uris []string) (string, error) {
+func (a *spotifyAdapter) CreatePlaylist(token string, setlist domain.Setlist, uris []string) (string, error) {
 	slog.Info("Creating playlist on Spotify", "artist", setlist.Artist.Name)
-	token, err := a.GetValidToken()
-	if err != nil {
-		return "", fmt.Errorf("spotify: getting token: %w", err)
-	}
 
 	body := spotifyCreatePlaylistRequest{
 		Name:        fmt.Sprintf("%s setlist by auto-setlist", setlist.Artist.Name),

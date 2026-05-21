@@ -8,8 +8,8 @@ import (
 
 type Spotify interface {
 	GetValidToken() (string, error)
-	GetSetlistTracks(domain.Setlist) ([]string, error)
-	CreatePlaylist(domain.Setlist, []string) (string, error)
+	GetSetlistTracks(token string, setlist domain.Setlist) ([]string, error)
+	CreatePlaylist(token string, setlist domain.Setlist, uris []string) (string, error)
 }
 
 type SpotifyCallbackReceiver interface {

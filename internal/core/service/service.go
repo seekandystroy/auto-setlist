@@ -17,8 +17,15 @@ func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify, musicbrainz po
 	return &service{setlistfm: setlistfm, spotify: spotify, musicbrainz: musicbrainz}
 }
 
-// MVP using the first Artist and first setlist found in the first page
 func (s *service) SetlistToPlaylist(name string) (string, error) {
+	token, err := s.spotify.GetValidToken()
+	if err != nil {
+		return "", fmt.Errorf("service: getting spotify token: %w", err)
+	}
+	return s.SetlistToPlaylistAuthed(name, token)
+}
+
+func (s *service) SetlistToPlaylistAuthed(name, token string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("artist name must not be empty")
 	}
@@ -56,12 +63,12 @@ func (s *service) SetlistToPlaylist(name string) (string, error) {
 		return "", fmt.Errorf("no non-empty setlists found for %q", name)
 	}
 
-	uris, err := s.spotify.GetSetlistTracks(*setlist)
+	uris, err := s.spotify.GetSetlistTracks(token, *setlist)
 	if err != nil {
 		return "", err
 	}
 
-	playlistID, err := s.spotify.CreatePlaylist(*setlist, uris)
+	playlistID, err := s.spotify.CreatePlaylist(token, *setlist, uris)
 	if err != nil {
 		return "", err
 	}

@@ -8,9 +8,12 @@
 
 <body>
   <h1>auto-setlist</h1>
-  <input id="artist" type="text" maxlength="100" placeholder="Artist name">
-  <button id="submit" disabled>Create Playlist</button>
-  <div id="result"></div>
+  <button id="connect" style="display:none">Connect to Spotify</button>
+  <div id="main" style="display:none">
+    <input id="artist" type="text" maxlength="100" placeholder="Artist name">
+    <button id="submit" disabled>Create Playlist</button>
+    <div id="result"></div>
+  </div>
   <script src="app.js"></script>
 </body>
 
