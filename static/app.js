@@ -85,7 +85,7 @@ async function init() {
     try {
       await getAccessToken(code);
     } catch (err) {
-      result.textContent = 'Spotify auth error: ' + err.message;
+      result.innerHTML = `<div class="notification is-danger">Spotify auth error: ${err.message}</div>`;
     }
   }
 
@@ -103,7 +103,7 @@ input.addEventListener('input', () => {
 });
 
 submitBtn.addEventListener('click', async () => {
-  result.textContent = '';
+  result.innerHTML = '';
   submitBtn.disabled = true;
   try {
     const resp = await fetch('/setlistjob', {
@@ -116,16 +116,12 @@ submitBtn.addEventListener('click', async () => {
     });
     const data = await resp.json();
     if (!resp.ok) {
-      result.textContent = 'Error: ' + (data.error || resp.statusText);
+      result.innerHTML = `<div class="notification is-danger">${data.error || resp.statusText}</div>`;
     } else {
-      const link = document.createElement('a');
-      link.href = data.playlist_url;
-      link.target = '_blank';
-      link.textContent = data.playlist_url;
-      result.appendChild(link);
+      result.innerHTML = `<div class="notification is-success">Playlist created: <a href="${data.playlist_url}" target="_blank">${data.playlist_url}</a></div>`;
     }
   } catch (err) {
-    result.textContent = 'Error: ' + err.message;
+    result.innerHTML = `<div class="notification is-danger">${err.message}</div>`;
   } finally {
     submitBtn.disabled = input.value.trim() === '';
   }

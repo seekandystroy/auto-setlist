@@ -3,17 +3,36 @@
 
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>auto-setlist</title>
+  <link rel="stylesheet" href="bulma.min.css">
 </head>
 
 <body>
-  <h1>auto-setlist</h1>
-  <button id="connect" style="display:none">Connect to Spotify</button>
-  <div id="main" style="display:none">
-    <input id="artist" type="text" maxlength="100" placeholder="Artist name">
-    <button id="submit" disabled>Create Playlist</button>
-    <div id="result"></div>
-  </div>
+  <section class="section">
+    <div class="container" style="max-width: 480px">
+      <h1 class="title">auto-setlist</h1>
+      <p class="subtitle">Create a Spotify playlist from an artist's latest setlist.</p>
+
+      <button id="connect" class="button is-success is-medium" style="display:none">
+        Connect to Spotify
+      </button>
+
+      <div id="main" style="display:none">
+        <div class="field has-addons">
+          <div class="control is-expanded">
+            <input id="artist" class="input is-medium" type="text" maxlength="100" placeholder="Artist name">
+          </div>
+          <div class="control">
+            <button id="submit" class="button is-primary is-medium" disabled>Create Playlist</button>
+          </div>
+        </div>
+
+        <div id="result" class="mt-4"></div>
+      </div>
+    </div>
+  </section>
+
   <script src="app.js"></script>
 </body>
 
