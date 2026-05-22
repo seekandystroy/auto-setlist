@@ -1,7 +1,11 @@
 package ports
 
-import "github.com/seekandystroy/auto-setlist/internal/core/domain"
+import (
+	"context"
+
+	"github.com/seekandystroy/auto-setlist/internal/core/domain"
+)
 
 type Musicbrainz interface {
-	GetArtist(MBID string) (*domain.Artist, error)
+	GetArtist(ctx context.Context, MBID string) (*domain.Artist, error)
 }

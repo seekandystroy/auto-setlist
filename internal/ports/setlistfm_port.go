@@ -1,8 +1,12 @@
 package ports
 
-import "github.com/seekandystroy/auto-setlist/internal/core/domain"
+import (
+	"context"
+
+	"github.com/seekandystroy/auto-setlist/internal/core/domain"
+)
 
 type Setlistfm interface {
-	SearchArtists(name string) ([]domain.Artist, error)
-	GetSetlists(artist domain.Artist) ([]domain.Setlist, error)
+	SearchArtists(ctx context.Context, name string) ([]domain.Artist, error)
+	GetSetlists(ctx context.Context, artist domain.Artist) ([]domain.Setlist, error)
 }

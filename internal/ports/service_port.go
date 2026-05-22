@@ -1,6 +1,8 @@
 package ports
 
+import "context"
+
 type SetlistService interface {
-	SetlistToPlaylist(artist string) (string, error)
-	SetlistToPlaylistAuthed(artist, spotifyAccessToken string) (string, error)
+	SetlistToPlaylist(ctx context.Context, artist string) (string, error)
+	SetlistToPlaylistAuthed(ctx context.Context, artist, spotifyAccessToken string) (string, error)
 }

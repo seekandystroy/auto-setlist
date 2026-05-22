@@ -1,13 +1,14 @@
 package adapters
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
 
+	applog "github.com/seekandystroy/auto-setlist/internal"
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
@@ -63,8 +64,8 @@ func NewSetlistfmAdapter(apiKey string) *setlistfmAdapter {
 	}
 }
 
-func (c *setlistfmAdapter) SearchArtists(name string) ([]domain.Artist, error) {
-	slog.Info("Searching for artist on SetlistFM", "name", name)
+func (c *setlistfmAdapter) SearchArtists(ctx context.Context, name string) ([]domain.Artist, error) {
+	applog.LoggerFromCtx(ctx).Info("Searching for artist on SetlistFM", "name", name)
 	// Intentionally just getting the first page of results, artist choice later
 	endpoint := fmt.Sprintf(
 		"%s/search/artists?artistName=%s&p=1&sort=relevance",
@@ -101,15 +102,16 @@ func (c *setlistfmAdapter) SearchArtists(name string) ([]domain.Artist, error) {
 	return artists, nil
 }
 
-func (c *setlistfmAdapter) GetSetlists(artist domain.Artist) ([]domain.Setlist, error) {
-	slog.Info("Getting setlists from SetlistFM", "artist", artist.Name)
+func (c *setlistfmAdapter) GetSetlists(ctx context.Context, artist domain.Artist) ([]domain.Setlist, error) {
+	log := applog.LoggerFromCtx(ctx)
+	log.Info("Getting setlists from SetlistFM", "artist", artist.Name)
 	endpoint := fmt.Sprintf("%s/artist/%s/setlists?p=1", c.baseURL, artist.MBID)
 
 	var lastErr error
 	wait := time.Second
 	for attempt := range 4 {
 		if attempt > 0 {
-			slog.Warn("GET setlists got error, waiting and retrying", "wait", wait)
+			log.Warn("GET setlists got error, waiting and retrying", "wait", wait)
 			c.sleepFn(wait)
 			wait *= 2
 		}

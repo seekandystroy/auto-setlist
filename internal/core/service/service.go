@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
@@ -17,20 +18,20 @@ func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify, musicbrainz po
 	return &service{setlistfm: setlistfm, spotify: spotify, musicbrainz: musicbrainz}
 }
 
-func (s *service) SetlistToPlaylist(name string) (string, error) {
+func (s *service) SetlistToPlaylist(ctx context.Context, name string) (string, error) {
 	token, err := s.spotify.GetValidToken()
 	if err != nil {
 		return "", fmt.Errorf("service: getting spotify token: %w", err)
 	}
-	return s.SetlistToPlaylistAuthed(name, token)
+	return s.SetlistToPlaylistAuthed(ctx, name, token)
 }
 
-func (s *service) SetlistToPlaylistAuthed(name, token string) (string, error) {
+func (s *service) SetlistToPlaylistAuthed(ctx context.Context, name, token string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("artist name must not be empty")
 	}
 
-	artists, err := s.searchArtists(name)
+	artists, err := s.searchArtists(ctx, name)
 	if err != nil {
 		return "", err
 	}
@@ -39,11 +40,11 @@ func (s *service) SetlistToPlaylistAuthed(name, token string) (string, error) {
 	}
 
 	artist := artists[0]
-	if err := s.fillSpotifyID(&artist); err != nil {
+	if err := s.fillSpotifyID(ctx, &artist); err != nil {
 		return "", err
 	}
 
-	setlists, err := s.getSetlists(artist)
+	setlists, err := s.getSetlists(ctx, artist)
 	if err != nil {
 		return "", err
 	}
@@ -63,12 +64,12 @@ func (s *service) SetlistToPlaylistAuthed(name, token string) (string, error) {
 		return "", fmt.Errorf("no non-empty setlists found for %q", name)
 	}
 
-	uris, err := s.spotify.GetSetlistTracks(token, *setlist)
+	uris, err := s.spotify.GetSetlistTracks(ctx, token, *setlist)
 	if err != nil {
 		return "", err
 	}
 
-	playlistID, err := s.spotify.CreatePlaylist(token, *setlist, uris)
+	playlistID, err := s.spotify.CreatePlaylist(ctx, token, *setlist, uris)
 	if err != nil {
 		return "", err
 	}
@@ -76,16 +77,16 @@ func (s *service) SetlistToPlaylistAuthed(name, token string) (string, error) {
 	return playlistID, nil
 }
 
-func (s *service) searchArtists(name string) ([]domain.Artist, error) {
-	result, err := s.setlistfm.SearchArtists(name)
+func (s *service) searchArtists(ctx context.Context, name string) ([]domain.Artist, error) {
+	result, err := s.setlistfm.SearchArtists(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("searching for artist %q: %w", name, err)
 	}
 	return result, nil
 }
 
-func (s *service) fillSpotifyID(artist *domain.Artist) error {
-	result, err := s.musicbrainz.GetArtist(artist.MBID)
+func (s *service) fillSpotifyID(ctx context.Context, artist *domain.Artist) error {
+	result, err := s.musicbrainz.GetArtist(ctx, artist.MBID)
 	if err != nil {
 		return fmt.Errorf("fetching artist from MusicBrainz: %w", err)
 	}
@@ -93,8 +94,8 @@ func (s *service) fillSpotifyID(artist *domain.Artist) error {
 	return nil
 }
 
-func (s *service) getSetlists(artist domain.Artist) ([]domain.Setlist, error) {
-	setlists, err := s.setlistfm.GetSetlists(artist)
+func (s *service) getSetlists(ctx context.Context, artist domain.Artist) ([]domain.Setlist, error) {
+	setlists, err := s.setlistfm.GetSetlists(ctx, artist)
 	if err != nil {
 		return nil, fmt.Errorf("fetching setlists for %q: %w", artist.Name, err)
 	}

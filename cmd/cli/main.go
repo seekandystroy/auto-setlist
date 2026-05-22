@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -44,7 +45,7 @@ func main() {
 		adapters.NewMusicbrainzAdapter(),
 	)
 
-	playlistID, err := svc.SetlistToPlaylist(artistName)
+	playlistID, err := svc.SetlistToPlaylist(context.Background(), artistName)
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)

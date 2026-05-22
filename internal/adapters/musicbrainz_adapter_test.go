@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,7 @@ func TestGetArtist_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestMusicbrainzAdapter(srv.URL)
-	artist, err := adapter.GetArtist("d262ea27-3ffe-40f7-b922-85c42d625e67")
+	artist, err := adapter.GetArtist(context.Background(), "d262ea27-3ffe-40f7-b922-85c42d625e67")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,7 +71,7 @@ func TestGetArtist_NoSpotifyRelation(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestMusicbrainzAdapter(srv.URL)
-	artist, err := adapter.GetArtist("some-mbid")
+	artist, err := adapter.GetArtist(context.Background(), "some-mbid")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestGetArtist_NoRelations(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestMusicbrainzAdapter(srv.URL)
-	artist, err := adapter.GetArtist("some-mbid")
+	artist, err := adapter.GetArtist(context.Background(), "some-mbid")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -116,7 +117,7 @@ func TestGetArtist_UsesFirstSpotifyRelation(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestMusicbrainzAdapter(srv.URL)
-	artist, err := adapter.GetArtist("some-mbid")
+	artist, err := adapter.GetArtist(context.Background(), "some-mbid")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -135,7 +136,7 @@ func TestGetArtist_NonOKStatus(t *testing.T) {
 			defer srv.Close()
 
 			adapter := newTestMusicbrainzAdapter(srv.URL)
-			_, err := adapter.GetArtist("some-mbid")
+			_, err := adapter.GetArtist(context.Background(), "some-mbid")
 			if err == nil {
 				t.Fatalf("expected error for status %d, got nil", status)
 			}
@@ -151,7 +152,7 @@ func TestGetArtist_NetworkError(t *testing.T) {
 	srv.Close()
 
 	adapter := newTestMusicbrainzAdapter(srv.URL)
-	_, err := adapter.GetArtist("some-mbid")
+	_, err := adapter.GetArtist(context.Background(), "some-mbid")
 	if err == nil {
 		t.Fatal("expected network error, got nil")
 	}
@@ -168,7 +169,7 @@ func TestGetArtist_MalformedJSON(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestMusicbrainzAdapter(srv.URL)
-	_, err := adapter.GetArtist("some-mbid")
+	_, err := adapter.GetArtist(context.Background(), "some-mbid")
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
 	}
@@ -189,7 +190,7 @@ func TestGetArtist_SendsCorrectHeaders(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestMusicbrainzAdapter(srv.URL)
-	adapter.GetArtist("some-mbid")
+	adapter.GetArtist(context.Background(), "some-mbid")
 
 	if gotUserAgent != "TestApp/1.0 ( test@example.com )" {
 		t.Errorf("unexpected User-Agent: %q", gotUserAgent)

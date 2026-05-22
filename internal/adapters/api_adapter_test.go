@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,11 +15,11 @@ type mockSetlistService struct {
 	err        error
 }
 
-func (m *mockSetlistService) SetlistToPlaylist(artist string) (string, error) {
+func (m *mockSetlistService) SetlistToPlaylist(_ context.Context, artist string) (string, error) {
 	return m.playlistID, m.err
 }
 
-func (m *mockSetlistService) SetlistToPlaylistAuthed(artist, token string) (string, error) {
+func (m *mockSetlistService) SetlistToPlaylistAuthed(_ context.Context, artist, token string) (string, error) {
 	return m.playlistID, m.err
 }
 

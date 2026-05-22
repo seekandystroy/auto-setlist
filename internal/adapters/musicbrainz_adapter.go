@@ -1,12 +1,13 @@
 package adapters
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 
+	applog "github.com/seekandystroy/auto-setlist/internal"
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
@@ -38,8 +39,8 @@ func NewMusicbrainzAdapter() *musicbrainzAdapter {
 	}
 }
 
-func (a *musicbrainzAdapter) GetArtist(mbid string) (*domain.Artist, error) {
-	slog.Info("Getting artist's Spotify ID from MusicBrainz", "mbid", mbid)
+func (a *musicbrainzAdapter) GetArtist(ctx context.Context, mbid string) (*domain.Artist, error) {
+	applog.LoggerFromCtx(ctx).Info("Getting artist's Spotify ID from MusicBrainz", "mbid", mbid)
 	endpoint := fmt.Sprintf("%s/artist/%s?inc=url-rels&fmt=json", a.baseURL, mbid)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)

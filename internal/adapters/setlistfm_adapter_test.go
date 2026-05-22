@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,7 @@ func TestSearchArtists_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestAdapter(srv.URL)
-	result, err := adapter.SearchArtists("Sprout")
+	result, err := adapter.SearchArtists(context.Background(), "Sprout")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,7 +61,7 @@ func TestSearchArtists_NonOKStatus(t *testing.T) {
 			defer srv.Close()
 
 			adapter := newTestAdapter(srv.URL)
-			_, err := adapter.SearchArtists("Sprout")
+			_, err := adapter.SearchArtists(context.Background(), "Sprout")
 			if err == nil {
 				t.Fatalf("expected error for status %d, got nil", status)
 			}
@@ -76,7 +77,7 @@ func TestSearchArtists_NetworkError(t *testing.T) {
 	srv.Close() // close immediately so the request fails
 
 	adapter := newTestAdapter(srv.URL)
-	_, err := adapter.SearchArtists("Sprout")
+	_, err := adapter.SearchArtists(context.Background(), "Sprout")
 	if err == nil {
 		t.Fatal("expected network error, got nil")
 	}
@@ -93,7 +94,7 @@ func TestSearchArtists_MalformedJSON(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestAdapter(srv.URL)
-	_, err := adapter.SearchArtists("Sprout")
+	_, err := adapter.SearchArtists(context.Background(), "Sprout")
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
 	}
@@ -119,7 +120,7 @@ func TestGetSetlists_HappyPath(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestAdapter(srv.URL)
-	result, err := adapter.GetSetlists(domain.Artist{MBID: "abc123", Name: "Sprout"})
+	result, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123", Name: "Sprout"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestGetSetlists_SkipsUnnamedSongs(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestAdapter(srv.URL)
-	result, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	result, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestGetSetlists_NonOKStatus(t *testing.T) {
 			defer srv.Close()
 
 			adapter := newTestAdapter(srv.URL)
-			_, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+			_, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
 			if err == nil {
 				t.Fatalf("expected error for status %d, got nil", status)
 			}
@@ -188,7 +189,7 @@ func TestGetSetlists_NetworkError(t *testing.T) {
 	srv.Close()
 
 	adapter := newTestAdapter(srv.URL)
-	_, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	_, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
 	if err == nil {
 		t.Fatal("expected network error, got nil")
 	}
@@ -205,7 +206,7 @@ func TestGetSetlists_MalformedJSON(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestAdapter(srv.URL)
-	_, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	_, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
 	}
@@ -235,7 +236,7 @@ func TestGetSetlists_RetriesOnFailureThenSucceeds(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestAdapter(srv.URL)
-	result, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	result, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -256,7 +257,7 @@ func TestGetSetlists_ExhaustsAllRetries(t *testing.T) {
 	defer srv.Close()
 
 	adapter := newTestAdapter(srv.URL)
-	_, err := adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	_, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
 	if err == nil {
 		t.Fatal("expected error after exhausting retries, got nil")
 	}
@@ -278,7 +279,7 @@ func TestGetSetlists_SleepDurationsAreExponential(t *testing.T) {
 	adapter := newTestAdapter(srv.URL)
 	adapter.sleepFn = func(d time.Duration) { slept = append(slept, d) }
 
-	adapter.GetSetlists(domain.Artist{MBID: "abc123"})
+	adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
 
 	expected := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
 	if len(slept) != len(expected) {
@@ -304,7 +305,7 @@ func TestSearchArtists_SendsCorrectHeaders(t *testing.T) {
 
 	adapter := newTestAdapter(srv.URL)
 	adapter.apiKey = "my-secret-key"
-	adapter.SearchArtists("Sprout")
+	adapter.SearchArtists(context.Background(), "Sprout")
 
 	if gotAPIKey != "my-secret-key" {
 		t.Errorf("expected x-api-key %q, got %q", "my-secret-key", gotAPIKey)

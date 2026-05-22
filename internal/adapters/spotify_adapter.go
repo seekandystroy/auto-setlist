@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	applog "github.com/seekandystroy/auto-setlist/internal"
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 	"github.com/seekandystroy/auto-setlist/internal/ports"
 )
@@ -144,8 +145,8 @@ func (a *spotifyAdapter) GetValidToken() (string, error) {
 	return tok.AccessToken, nil
 }
 
-func (a *spotifyAdapter) GetSetlistTracks(token string, setlist domain.Setlist) ([]string, error) {
-	slog.Info("Searching for tracks on Spotify", "count", len(setlist.Tracks))
+func (a *spotifyAdapter) GetSetlistTracks(ctx context.Context, token string, setlist domain.Setlist) ([]string, error) {
+	applog.LoggerFromCtx(ctx).Info("Searching for tracks on Spotify", "count", len(setlist.Tracks))
 	var uris []string
 	for _, trackName := range setlist.Tracks {
 		uri, found, err := a.searchTrack(token, trackName, setlist.Artist)
@@ -159,8 +160,8 @@ func (a *spotifyAdapter) GetSetlistTracks(token string, setlist domain.Setlist) 
 	return uris, nil
 }
 
-func (a *spotifyAdapter) CreatePlaylist(token string, setlist domain.Setlist, uris []string) (string, error) {
-	slog.Info("Creating playlist on Spotify", "artist", setlist.Artist.Name)
+func (a *spotifyAdapter) CreatePlaylist(ctx context.Context, token string, setlist domain.Setlist, uris []string) (string, error) {
+	applog.LoggerFromCtx(ctx).Info("Creating playlist on Spotify", "artist", setlist.Artist.Name)
 
 	body := spotifyCreatePlaylistRequest{
 		Name:        fmt.Sprintf("%s setlist by auto-setlist", setlist.Artist.Name),

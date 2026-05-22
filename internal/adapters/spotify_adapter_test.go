@@ -382,7 +382,7 @@ func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	uris, err := a.GetSetlistTracks("test-token", setlist)
+	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	uris, err := a.GetSetlistTracks("test-token", setlist)
+	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	uris, err := a.GetSetlistTracks("test-token", setlist)
+	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.GetSetlistTracks("test-token", setlist)
+	_, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
 	if err == nil {
 		t.Fatal("expected error for non-OK status, got nil")
 	}
@@ -484,7 +484,7 @@ func TestGetSetlistTracks_SendsBearerToken(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	a.GetSetlistTracks("test-access-token", domain.Setlist{Tracks: []string{"Song"}})
+	a.GetSetlistTracks(context.Background(), "test-access-token", domain.Setlist{Tracks: []string{"Song"}})
 
 	if !strings.HasPrefix(gotAuth, "Bearer ") {
 		t.Errorf("expected Bearer token, got: %s", gotAuth)
@@ -507,7 +507,7 @@ func TestCreatePlaylist_HappyPath(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	id, err := a.CreatePlaylist("test-token", setlist, nil)
+	id, err := a.CreatePlaylist(context.Background(), "test-token", setlist, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -536,7 +536,7 @@ func TestCreatePlaylist_AddsTracksToPlaylist(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.CreatePlaylist("test-token", setlist, uris)
+	_, err := a.CreatePlaylist(context.Background(), "test-token", setlist, uris)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -567,7 +567,7 @@ func TestCreatePlaylist_AddTracksNonOKStatus(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.CreatePlaylist("test-token", setlist, []string{"spotify:track:a"})
+	_, err := a.CreatePlaylist(context.Background(), "test-token", setlist, []string{"spotify:track:a"})
 	if err == nil {
 		t.Fatal("expected error from add items, got nil")
 	}
@@ -590,7 +590,7 @@ func TestCreatePlaylist_PlaylistName(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	a.CreatePlaylist("test-token", setlist, nil)
+	a.CreatePlaylist(context.Background(), "test-token", setlist, nil)
 
 	wantName := "Pitbull setlist by auto-setlist"
 	if gotBody.Name != wantName {
@@ -615,7 +615,7 @@ func TestCreatePlaylist_SendsCorrectHeaders(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	a.CreatePlaylist("test-access-token", domain.Setlist{}, nil)
+	a.CreatePlaylist(context.Background(), "test-access-token", domain.Setlist{}, nil)
 
 	if !strings.HasPrefix(gotAuth, "Bearer ") {
 		t.Errorf("expected Bearer auth, got: %s", gotAuth)
@@ -637,7 +637,7 @@ func TestCreatePlaylist_NonOKStatus(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.CreatePlaylist("test-token", domain.Setlist{}, nil)
+	_, err := a.CreatePlaylist(context.Background(), "test-token", domain.Setlist{}, nil)
 	if err == nil {
 		t.Fatal("expected error for non-201 status, got nil")
 	}
@@ -656,7 +656,7 @@ func TestCreatePlaylist_MalformedJSON(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.CreatePlaylist("test-token", domain.Setlist{}, nil)
+	_, err := a.CreatePlaylist(context.Background(), "test-token", domain.Setlist{}, nil)
 	if err == nil {
 		t.Fatal("expected decode error, got nil")
 	}
@@ -679,7 +679,7 @@ func TestGetSetlistTracks_401InvalidToken(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.GetSetlistTracks("expired-token", setlist)
+	_, err := a.GetSetlistTracks(context.Background(), "expired-token", setlist)
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
 	}
@@ -697,7 +697,7 @@ func TestCreatePlaylist_401InvalidToken(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.CreatePlaylist("expired-token", domain.Setlist{}, nil)
+	_, err := a.CreatePlaylist(context.Background(), "expired-token", domain.Setlist{}, nil)
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
 	}
