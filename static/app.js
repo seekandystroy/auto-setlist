@@ -149,6 +149,10 @@ input.addEventListener('input', () => {
   submitBtn.disabled = input.value.trim() === '';
 });
 
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !submitBtn.disabled) submitBtn.click();
+});
+
 submitBtn.addEventListener('click', async () => {
   result.innerHTML = '';
   submitBtn.disabled = true;
