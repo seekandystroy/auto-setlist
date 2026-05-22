@@ -24,6 +24,7 @@ type spotifyCallbackAdapter struct {
 	timeout time.Duration
 }
 
+// This adapter is intended to enable authorization with spotify when running the CLI version
 func NewSpotifyCallbackAdapter() *spotifyCallbackAdapter {
 	return &spotifyCallbackAdapter{
 		addr:    "127.0.0.1:8080",
