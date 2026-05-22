@@ -55,34 +55,42 @@ func (a *apiAdapter) handleSetlistJob(w http.ResponseWriter, r *http.Request) {
 	ctx := applog.ContextWithLogger(r.Context(), logger)
 
 	logger.Info("request", "method", r.Method, "path", r.URL.Path)
-	defer func() { logger.Info("response", "method", r.Method, "path", r.URL.Path, "status", sr.status) }()
+	var detail string
+	defer func() { logger.Info("response", "method", r.Method, "path", r.URL.Path, "status", sr.status, "detail", detail) }()
 
 	if token == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing Autosetlist-Spotify-Token header"})
+		detail = "missing Autosetlist-Spotify-Token header"
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
 		return
 	}
 
 	var req setlistJobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		detail = "invalid JSON"
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
 		return
 	}
 	req.Artist = strings.TrimSpace(req.Artist)
 	if req.Artist == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "artist is required"})
+		detail = "artist is required"
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
 		return
 	}
 	if len(req.Artist) > 100 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "artist must be 100 characters or fewer"})
+		detail = "artist must be 100 characters or fewer"
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
 		return
 	}
 	id, err := a.svc.SetlistToPlaylistAuthed(ctx, req.Artist, token)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		detail = err.Error()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": detail})
 		return
 	}
+	playlistURL := "https://open.spotify.com/playlist/" + id
+	detail = playlistURL
 	writeJSON(w, http.StatusOK, setlistJobResponse{
-		PlaylistURL: "https://open.spotify.com/playlist/" + id,
+		PlaylistURL: playlistURL,
 	})
 }
 
