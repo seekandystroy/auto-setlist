@@ -89,6 +89,12 @@ type spotifyTokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+type spotifyErrorResponse struct {
+	Error struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
 func NewSpotifyAdapter(clientID, clientSecret string, callbackReceiver ports.SpotifyCallbackReceiver) (*spotifyAdapter, error) {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -241,6 +247,10 @@ func (a *spotifyAdapter) searchTrack(token, trackName string, artist domain.Arti
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		var errResp spotifyErrorResponse
+		if jsonErr := json.NewDecoder(resp.Body).Decode(&errResp); jsonErr == nil {
+			return "", false, fmt.Errorf("spotify: unexpected status %d from search: %s", resp.StatusCode, errResp.Error.Message)
+		}
 		return "", false, fmt.Errorf("spotify: unexpected status %d from search", resp.StatusCode)
 	}
 
