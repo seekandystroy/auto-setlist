@@ -39,6 +39,42 @@ async function redirectToAuthCodeFlow() {
   window.location.href = authUrl.toString();
 }
 
+function saveToken(data) {
+  localStorage.setItem('spotify_access_token', data.access_token);
+  if (data.refresh_token) localStorage.setItem('spotify_refresh_token', data.refresh_token);
+  const expiresAt = Date.now() + data.expires_in * 1000;
+  localStorage.setItem('spotify_expires_at', String(expiresAt));
+}
+
+function tokenIsValid() {
+  const expiresAt = Number(localStorage.getItem('spotify_expires_at'));
+  return expiresAt && Date.now() + 30_000 < expiresAt;
+}
+
+async function refreshAccessToken() {
+  const refreshToken = localStorage.getItem('spotify_refresh_token');
+  if (!refreshToken) throw new Error('No refresh token available');
+  const response = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error_description || 'Token refresh failed');
+  saveToken(data);
+  return data.access_token;
+}
+
+async function getValidToken() {
+  if (tokenIsValid()) return localStorage.getItem('spotify_access_token');
+  if (localStorage.getItem('spotify_refresh_token')) return refreshAccessToken();
+  return null;
+}
+
 async function getAccessToken(code) {
   const verifier = localStorage.getItem('code_verifier');
   const response = await fetch('https://accounts.spotify.com/api/token', {
@@ -54,7 +90,7 @@ async function getAccessToken(code) {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error_description || 'Token exchange failed');
-  localStorage.setItem('spotify_access_token', data.access_token);
+  saveToken(data);
   // Remove code from URL without adding a history entry
   window.history.replaceState({}, '', window.location.pathname);
 }
@@ -89,9 +125,13 @@ async function init() {
     }
   }
 
-  if (localStorage.getItem('spotify_access_token')) {
+  const token = await getValidToken().catch(() => null);
+  if (token) {
     showMain();
   } else {
+    localStorage.removeItem('spotify_access_token');
+    localStorage.removeItem('spotify_refresh_token');
+    localStorage.removeItem('spotify_expires_at');
     showConnect();
   }
 }
@@ -114,11 +154,21 @@ submitBtn.addEventListener('click', async () => {
   submitBtn.disabled = true;
   submitBtn.classList.add('is-loading');
   try {
+    let token;
+    try {
+      token = await getValidToken();
+    } catch (_) {
+      token = null;
+    }
+    if (!token) {
+      showConnect();
+      return;
+    }
     const resp = await fetch('/setlistjob', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Autosetlist-Spotify-Token': localStorage.getItem('spotify_access_token')
+        'Autosetlist-Spotify-Token': token,
       },
       body: JSON.stringify({ artist: input.value.trim() }),
     });
