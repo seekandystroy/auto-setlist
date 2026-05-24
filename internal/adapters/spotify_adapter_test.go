@@ -471,6 +471,31 @@ func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
 	}
 }
 
+func TestGetSetlistTracks_403NotRegistered(t *testing.T) {
+	setlist := domain.Setlist{
+		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Tracks: []string{"Song"},
+	}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("The user is not registered for this application. Please check your settings on https://developer.spotify.com/dashboard."))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	_, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
+	if err == nil {
+		t.Fatal("expected error for 403 not registered, got nil")
+	}
+	want := "spotify: users outside of allowlist not supported. Contact the maintainer to use auto-setlist."
+	if err.Error() != want {
+		t.Errorf("expected %q, got %q", want, err.Error())
+	}
+}
+
 func TestGetSetlistTracks_SendsBearerToken(t *testing.T) {
 	var gotAuth string
 
@@ -491,6 +516,26 @@ func TestGetSetlistTracks_SendsBearerToken(t *testing.T) {
 	}
 	if !strings.Contains(gotAuth, "test-access-token") {
 		t.Errorf("expected access token in header, got: %s", gotAuth)
+	}
+}
+
+func TestCreatePlaylist_403NotRegistered(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("The user is not registered for this application. Please check your settings on https://developer.spotify.com/dashboard."))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	_, err := a.CreatePlaylist(context.Background(), "test-token", domain.Setlist{}, nil)
+	if err == nil {
+		t.Fatal("expected error for 403 not registered, got nil")
+	}
+	want := "spotify: users outside of allowlist not supported. Contact the maintainer to use auto-setlist."
+	if err.Error() != want {
+		t.Errorf("expected %q, got %q", want, err.Error())
 	}
 }
 

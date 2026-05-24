@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -73,6 +74,8 @@ type spotifyToken struct {
 	ExpiresAt    time.Time `json:"expires_at"`
 	Scope        string    `json:"scope"`
 }
+
+const errNotRegisteredMsg = "spotify: users outside of allowlist not supported. Contact the maintainer to use auto-setlist."
 
 func (t *spotifyToken) isValid() bool {
 	if t == nil || t.AccessToken == "" {
@@ -186,6 +189,10 @@ func (a *spotifyAdapter) CreatePlaylist(ctx context.Context, token string, setli
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusForbidden && strings.Contains(string(body), "The user is not registered for this application. Please check your settings on https://developer.spotify.com/dashboard.") {
+			return "", errors.New(errNotRegisteredMsg)
+		}
 		return "", fmt.Errorf("spotify: unexpected status %d from create playlist", resp.StatusCode)
 	}
 
@@ -248,8 +255,12 @@ func (a *spotifyAdapter) searchTrack(token, trackName string, artist domain.Arti
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusForbidden && strings.Contains(string(body), "The user is not registered for this application. Please check your settings on https://developer.spotify.com/dashboard.") {
+			return "", false, errors.New(errNotRegisteredMsg)
+		}
 		var errResp spotifyErrorResponse
-		if jsonErr := json.NewDecoder(resp.Body).Decode(&errResp); jsonErr == nil {
+		if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil && errResp.Error.Message != "" {
 			return "", false, fmt.Errorf("spotify: unexpected status %d from search: %s", resp.StatusCode, errResp.Error.Message)
 		}
 		return "", false, fmt.Errorf("spotify: unexpected status %d from search", resp.StatusCode)
