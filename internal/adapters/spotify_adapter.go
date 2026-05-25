@@ -17,7 +17,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	applog "github.com/seekandystroy/auto-setlist/internal"
@@ -35,6 +37,7 @@ type spotifyAdapter struct {
 	tokenFilePath    string
 	openBrowserFn    func(string) error
 	callbackReceiver ports.SpotifyCallbackReceiver
+	sleepFn          func(time.Duration)
 }
 
 type spotifySearchArtist struct {
@@ -115,6 +118,7 @@ func NewSpotifyAdapter(clientID, clientSecret string, callbackReceiver ports.Spo
 		callbackReceiver: callbackReceiver,
 	}
 	a.openBrowserFn = defaultOpenBrowser
+	a.sleepFn = time.Sleep
 	return a, nil
 }
 
@@ -150,14 +154,34 @@ func (a *spotifyAdapter) GetValidToken() (string, error) {
 
 func (a *spotifyAdapter) GetSetlistTracks(ctx context.Context, token string, setlist domain.Setlist) ([]string, error) {
 	applog.LoggerFromCtx(ctx).Info("Searching for tracks on Spotify", "count", len(setlist.Tracks))
+
+	type result struct {
+		uri   string
+		found bool
+		err   error
+	}
+
+	results := make([]result, len(setlist.Tracks))
+	var wg sync.WaitGroup
+
+	for i, trackName := range setlist.Tracks {
+		wg.Add(1)
+		go func(idx int, name string) {
+			defer wg.Done()
+			uri, found, err := a.searchTrack(ctx, token, name, setlist.Artist)
+			results[idx] = result{uri: uri, found: found, err: err}
+		}(i, trackName)
+	}
+
+	wg.Wait()
+
 	var uris []string
-	for _, trackName := range setlist.Tracks {
-		uri, found, err := a.searchTrack(token, trackName, setlist.Artist)
-		if err != nil {
-			return nil, err
+	for _, r := range results {
+		if r.err != nil {
+			return nil, r.err
 		}
-		if found {
-			uris = append(uris, uri)
+		if r.found {
+			uris = append(uris, r.uri)
 		}
 	}
 	return uris, nil
@@ -236,52 +260,69 @@ func (a *spotifyAdapter) addTracksToPlaylist(token, playlistID string, uris []st
 	return nil
 }
 
-func (a *spotifyAdapter) searchTrack(token, trackName string, artist domain.Artist) (string, bool, error) {
+func (a *spotifyAdapter) searchTrack(ctx context.Context, token, trackName string, artist domain.Artist) (string, bool, error) {
 	params := url.Values{
 		"q":     {fmt.Sprintf("track:%s artist:%s", trackName, artist.Name)},
 		"type":  {"track"},
 		"limit": {"5"},
 	}
-	req, err := http.NewRequest(http.MethodGet, a.apiBaseURL+"/search?"+params.Encode(), nil)
-	if err != nil {
-		return "", false, fmt.Errorf("spotify: building search request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return "", false, fmt.Errorf("spotify: executing search request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode == http.StatusForbidden && strings.Contains(string(body), "The user is not registered for this application. Please check your settings on https://developer.spotify.com/dashboard.") {
-			return "", false, errors.New(errNotRegisteredMsg)
+	for {
+		req, err := http.NewRequest(http.MethodGet, a.apiBaseURL+"/search?"+params.Encode(), nil)
+		if err != nil {
+			return "", false, fmt.Errorf("spotify: building search request: %w", err)
 		}
-		var errResp spotifyErrorResponse
-		if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil && errResp.Error.Message != "" {
-			return "", false, fmt.Errorf("spotify: unexpected status %d from search: %s", resp.StatusCode, errResp.Error.Message)
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := a.httpClient.Do(req)
+		if err != nil {
+			return "", false, fmt.Errorf("spotify: executing search request: %w", err)
 		}
-		return "", false, fmt.Errorf("spotify: unexpected status %d from search", resp.StatusCode)
-	}
 
-	var result spotifySearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", false, fmt.Errorf("spotify: decoding search response: %w", err)
-	}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			secs, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+			resp.Body.Close()
+			if secs <= 0 {
+				secs = 1
+			}
 
-	for _, item := range result.Tracks.Items {
-		if !strings.EqualFold(item.Name, trackName) {
+			applog.LoggerFromCtx(ctx).Warn("Search tracks rate limited, waiting and retrying", "wait", secs)
+
+			a.sleepFn(time.Duration(secs) * time.Second)
 			continue
 		}
-		for _, a := range item.Artists {
-			if a.ID == artist.SpotifyID {
-				return item.URI, true, nil
+
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode == http.StatusForbidden && strings.Contains(string(body), "The user is not registered for this application. Please check your settings on https://developer.spotify.com/dashboard.") {
+				return "", false, errors.New(errNotRegisteredMsg)
+			}
+			var errResp spotifyErrorResponse
+			if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil && errResp.Error.Message != "" {
+				return "", false, fmt.Errorf("spotify: unexpected status %d from search: %s", resp.StatusCode, errResp.Error.Message)
+			}
+			return "", false, fmt.Errorf("spotify: unexpected status %d from search", resp.StatusCode)
+		}
+
+		var result spotifySearchResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return "", false, fmt.Errorf("spotify: decoding search response: %w", err)
+		}
+
+		for _, item := range result.Tracks.Items {
+			if !strings.EqualFold(item.Name, trackName) {
+				continue
+			}
+			for _, a := range item.Artists {
+				if a.ID == artist.SpotifyID {
+					return item.URI, true, nil
+				}
 			}
 		}
+		return "", false, nil
 	}
-	return "", false, nil
 }
 
 func (a *spotifyAdapter) buildAuthURL(state string) string {

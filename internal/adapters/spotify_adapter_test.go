@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ func newTestAccountsAdapter(t *testing.T, serverURL string) *spotifyAdapter {
 		tokenFilePath:    filepath.Join(t.TempDir(), "spotify_token.json"),
 		openBrowserFn:    func(string) error { return nil },
 		callbackReceiver: &mockCallbackReceiver{err: errors.New("unexpected callback call")},
+		sleepFn:          func(time.Duration) {},
 	}
 }
 
@@ -748,5 +750,117 @@ func TestCreatePlaylist_401InvalidToken(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "401") {
 		t.Errorf("expected error to mention 401, got %q", err.Error())
+	}
+}
+
+func TestSearchTrack_429RetriesAfterDelay(t *testing.T) {
+	var callCount atomic.Int32
+	var sleptFor atomic.Int64
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := callCount.Add(1)
+		if n == 1 {
+			w.Header().Set("Retry-After", "3")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(makeSearchResponse("Song", "spotify:track:uri1", "artist-id"))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	a.sleepFn = func(d time.Duration) { sleptFor.Add(int64(d)) }
+
+	artist := domain.Artist{SpotifyID: "artist-id"}
+	uri, found, err := a.searchTrack(context.Background(), "token", "Song", artist)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found after retry")
+	}
+	if uri != "spotify:track:uri1" {
+		t.Errorf("unexpected URI: %s", uri)
+	}
+	if callCount.Load() != 2 {
+		t.Errorf("expected 2 requests (1 retry), got %d", callCount.Load())
+	}
+	if sleptFor.Load() != int64(3*time.Second) {
+		t.Errorf("expected sleep of 3s, got %v", time.Duration(sleptFor.Load()))
+	}
+}
+
+func TestSearchTrack_429MissingRetryAfterDefaultsToOne(t *testing.T) {
+	var callCount atomic.Int32
+	var sleptFor atomic.Int64
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := callCount.Add(1)
+		if n == 1 {
+			// No Retry-After header.
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(makeSearchResponse("Song", "spotify:track:uri1", "artist-id"))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	a.sleepFn = func(d time.Duration) { sleptFor.Add(int64(d)) }
+
+	uri, found, err := a.searchTrack(context.Background(), "token", "Song", domain.Artist{SpotifyID: "artist-id"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	_ = uri
+	if sleptFor.Load() != int64(time.Second) {
+		t.Errorf("expected default sleep of 1s, got %v", time.Duration(sleptFor.Load()))
+	}
+}
+
+func TestGetSetlistTracks_PreservesOrder(t *testing.T) {
+	setlist := domain.Setlist{
+		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Tracks: []string{"Alpha", "Beta", "Gamma"},
+	}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(q, "Alpha"):
+			json.NewEncoder(w).Encode(makeSearchResponse("Alpha", "spotify:track:alpha", "artist-id"))
+		case strings.Contains(q, "Beta"):
+			// Simulate Beta being slower to verify ordering is index-based, not arrival-based.
+			time.Sleep(10 * time.Millisecond)
+			json.NewEncoder(w).Encode(makeSearchResponse("Beta", "spotify:track:beta", "artist-id"))
+		case strings.Contains(q, "Gamma"):
+			json.NewEncoder(w).Encode(makeSearchResponse("Gamma", "spotify:track:gamma", "artist-id"))
+		}
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	uris, err := a.GetSetlistTracks(context.Background(), "token", setlist)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"spotify:track:alpha", "spotify:track:beta", "spotify:track:gamma"}
+	if len(uris) != len(want) {
+		t.Fatalf("expected %d URIs, got %d", len(want), len(uris))
+	}
+	for i, w := range want {
+		if uris[i] != w {
+			t.Errorf("position %d: expected %s, got %s", i, w, uris[i])
+		}
 	}
 }
