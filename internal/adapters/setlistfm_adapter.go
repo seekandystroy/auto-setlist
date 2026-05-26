@@ -64,13 +64,13 @@ func NewSetlistfmAdapter(apiKey string) *setlistfmAdapter {
 	}
 }
 
-func (c *setlistfmAdapter) SearchArtists(ctx context.Context, name string) ([]domain.Artist, error) {
-	applog.LoggerFromCtx(ctx).Info("Searching for artist on SetlistFM", "name", name)
+func (c *setlistfmAdapter) SearchArtists(ctx context.Context, artistName string) ([]domain.Artist, error) {
+	applog.LoggerFromCtx(ctx).Info("Searching for artist on SetlistFM", "name", artistName)
 	// Intentionally just getting the first page of results, artist choice later
 	endpoint := fmt.Sprintf(
 		"%s/search/artists?artistName=%s&p=1&sort=relevance",
 		c.baseURL,
-		url.QueryEscape(name),
+		url.QueryEscape(artistName),
 	)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)

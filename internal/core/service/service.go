@@ -18,25 +18,25 @@ func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify, musicbrainz po
 	return &service{setlistfm: setlistfm, spotify: spotify, musicbrainz: musicbrainz}
 }
 
-func (s *service) SetlistToPlaylist(ctx context.Context, name string) (string, error) {
+func (s *service) SetlistToPlaylist(ctx context.Context, artistName string) (string, error) {
 	token, err := s.spotify.GetValidToken()
 	if err != nil {
 		return "", fmt.Errorf("service: getting spotify token: %w", err)
 	}
-	return s.SetlistToPlaylistAuthed(ctx, name, token)
+	return s.SetlistToPlaylistAuthed(ctx, artistName, token)
 }
 
-func (s *service) SetlistToPlaylistAuthed(ctx context.Context, name, token string) (string, error) {
-	if name == "" {
+func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token string) (string, error) {
+	if artistName == "" {
 		return "", fmt.Errorf("artist name must not be empty")
 	}
 
-	artists, err := s.searchArtists(ctx, name)
+	artists, err := s.searchArtists(ctx, artistName)
 	if err != nil {
 		return "", err
 	}
 	if len(artists) == 0 {
-		return "", fmt.Errorf("no artist found for %q", name)
+		return "", fmt.Errorf("no artist found for %q", artistName)
 	}
 
 	artist := artists[0]
@@ -49,7 +49,7 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, name, token strin
 		return "", err
 	}
 	if len(setlists) == 0 {
-		return "", fmt.Errorf("no setlists found for %q", name)
+		return "", fmt.Errorf("no setlists found for %q", artistName)
 	}
 
 	var setlist *domain.Setlist
@@ -61,7 +61,7 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, name, token strin
 	}
 
 	if setlist == nil {
-		return "", fmt.Errorf("no non-empty setlists found for %q", name)
+		return "", fmt.Errorf("no non-empty setlists found for %q", artistName)
 	}
 
 	uris, err := s.spotify.GetSetlistTracks(ctx, token, *setlist)
@@ -77,10 +77,10 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, name, token strin
 	return playlistID, nil
 }
 
-func (s *service) searchArtists(ctx context.Context, name string) ([]domain.Artist, error) {
-	result, err := s.setlistfm.SearchArtists(ctx, name)
+func (s *service) searchArtists(ctx context.Context, artistName string) ([]domain.Artist, error) {
+	result, err := s.setlistfm.SearchArtists(ctx, artistName)
 	if err != nil {
-		return nil, fmt.Errorf("searching for artist %q: %w", name, err)
+		return nil, fmt.Errorf("searching for artist %q: %w", artistName, err)
 	}
 	return result, nil
 }
