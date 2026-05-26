@@ -32,7 +32,8 @@ func NewAPIAdapter(svc ports.SetlistService) http.Handler {
 }
 
 type setlistJobRequest struct {
-	Artist string `json:"artist"`
+	Artist        string `json:"artist"`
+	IncludeCovers bool   `json:"include_covers"`
 }
 
 type setlistJobResponse struct {
@@ -81,7 +82,7 @@ func (a *apiAdapter) handleSetlistJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
 		return
 	}
-	id, err := a.svc.SetlistToPlaylistAuthed(ctx, req.Artist, token)
+	id, err := a.svc.SetlistToPlaylistAuthed(ctx, req.Artist, token, req.IncludeCovers)
 	if err != nil {
 		detail = err.Error()
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": detail})

@@ -102,6 +102,7 @@ const mainDiv = document.getElementById('main');
 const input = document.getElementById('artist');
 const submitBtn = document.getElementById('submit');
 const result = document.getElementById('result');
+const includeCoversCheckbox = document.getElementById('include-covers');
 
 function showMain() {
   connectBtn.style.display = 'none';
@@ -140,14 +141,17 @@ connectBtn.addEventListener('click', () => redirectToAuthCodeFlow());
 
 let requestCompleted = false;
 
-input.addEventListener('input', () => {
+function onInputChange() {
   if (requestCompleted) {
     requestCompleted = false;
     submitBtn.textContent = 'Create Playlist';
     result.innerHTML = '';
   }
   submitBtn.disabled = input.value.trim() === '';
-});
+}
+
+input.addEventListener('input', onInputChange);
+includeCoversCheckbox.addEventListener('change', onInputChange);
 
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !submitBtn.disabled) submitBtn.click();
@@ -174,7 +178,7 @@ submitBtn.addEventListener('click', async () => {
         'Content-Type': 'application/json',
         'Autosetlist-Spotify-Token': token,
       },
-      body: JSON.stringify({ artist: input.value.trim() }),
+      body: JSON.stringify({ artist: input.value.trim(), include_covers: includeCoversCheckbox.checked }),
     });
     const data = await resp.json();
     if (!resp.ok) {

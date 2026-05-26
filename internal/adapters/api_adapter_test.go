@@ -11,15 +11,18 @@ import (
 )
 
 type mockSetlistService struct {
-	playlistID string
-	err        error
+	playlistID           string
+	err                  error
+	receivedIncludeCovers bool
 }
 
-func (m *mockSetlistService) SetlistToPlaylist(_ context.Context, artist string) (string, error) {
+func (m *mockSetlistService) SetlistToPlaylist(_ context.Context, artist string, includeCovers bool) (string, error) {
+	m.receivedIncludeCovers = includeCovers
 	return m.playlistID, m.err
 }
 
-func (m *mockSetlistService) SetlistToPlaylistAuthed(_ context.Context, artist, token string) (string, error) {
+func (m *mockSetlistService) SetlistToPlaylistAuthed(_ context.Context, artist, token string, includeCovers bool) (string, error) {
+	m.receivedIncludeCovers = includeCovers
 	return m.playlistID, m.err
 }
 
@@ -157,5 +160,25 @@ func TestSetlistJob_MissingSpotifyToken(t *testing.T) {
 	}
 	if !strings.Contains(body["error"], "Autosetlist-Spotify-Token") {
 		t.Errorf("expected error to mention header name, got: %q", body["error"])
+	}
+}
+
+func TestSetlistJob_IncludeCoversDefaultsFalse(t *testing.T) {
+	svc := &mockSetlistService{playlistID: "abc123"}
+	handler := NewAPIAdapter(svc)
+	post(handler, `{"artist":"Hellripper"}`)
+
+	if svc.receivedIncludeCovers {
+		t.Error("expected includeCovers to default to false when omitted, got true")
+	}
+}
+
+func TestSetlistJob_IncludeCoversTrue(t *testing.T) {
+	svc := &mockSetlistService{playlistID: "abc123"}
+	handler := NewAPIAdapter(svc)
+	post(handler, `{"artist":"Hellripper","include_covers":true}`)
+
+	if !svc.receivedIncludeCovers {
+		t.Error("expected includeCovers=true to be forwarded to service, got false")
 	}
 }

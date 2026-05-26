@@ -130,8 +130,8 @@ func TestGetSetlists_HappyPath(t *testing.T) {
 	if len(result[0].Tracks) != 3 {
 		t.Errorf("expected 3 tracks, got %d", len(result[0].Tracks))
 	}
-	if result[0].Tracks[0] != "Song A" {
-		t.Errorf("expected first track %q, got %q", "Song A", result[0].Tracks[0])
+	if result[0].Tracks[0].Name != "Song A" {
+		t.Errorf("expected first track %q, got %q", "Song A", result[0].Tracks[0].Name)
 	}
 	if result[0].Artist.MBID != "abc123" {
 		t.Errorf("expected artist MBID %q, got %q", "abc123", result[0].Artist.MBID)
@@ -243,7 +243,7 @@ func TestGetSetlists_RetriesOnFailureThenSucceeds(t *testing.T) {
 	if attempts != 3 {
 		t.Errorf("expected 3 attempts, got %d", attempts)
 	}
-	if len(result[0].Tracks) != 1 || result[0].Tracks[0] != "Song A" {
+	if len(result[0].Tracks) != 1 || result[0].Tracks[0].Name != "Song A" {
 		t.Errorf("unexpected result: %+v", result)
 	}
 }
@@ -289,6 +289,65 @@ func TestGetSetlists_SleepDurationsAreExponential(t *testing.T) {
 		if slept[i] != d {
 			t.Errorf("sleep[%d]: expected %v, got %v", i, d, slept[i])
 		}
+	}
+}
+
+func TestGetSetlists_ParsesCoverSong(t *testing.T) {
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{Sets: setlistfmSets{Set: []setlistfmSet{
+				{Songs: []setlistfmSong{
+					{Name: "Whiplash", Cover: &setlistfmCoverArtist{Name: "Metallica"}},
+					{Name: "Own Song"},
+				}},
+			}}},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result[0].Tracks) != 2 {
+		t.Fatalf("expected 2 tracks, got %d", len(result[0].Tracks))
+	}
+	if result[0].Tracks[0].CoveredArtistName != "Metallica" {
+		t.Errorf("expected CoveredArtistName %q, got %q", "Metallica", result[0].Tracks[0].CoveredArtistName)
+	}
+	if result[0].Tracks[1].CoveredArtistName != "" {
+		t.Errorf("expected empty CoveredArtistName for own song, got %q", result[0].Tracks[1].CoveredArtistName)
+	}
+}
+
+func TestGetSetlists_CoverAbsentLeavesEmpty(t *testing.T) {
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{Sets: setlistfmSets{Set: []setlistfmSet{
+				{Songs: []setlistfmSong{{Name: "Regular Song"}}},
+			}}},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].Tracks[0].CoveredArtistName != "" {
+		t.Errorf("expected empty CoveredArtistName, got %q", result[0].Tracks[0].CoveredArtistName)
 	}
 }
 

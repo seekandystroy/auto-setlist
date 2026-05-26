@@ -365,7 +365,7 @@ func makeSearchResponse(name, uri, artistID string) spotifySearchResponse {
 func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 	setlist := domain.Setlist{
 		Artist: domain.Artist{MBID: "m1", Name: "Pitbull", SpotifyID: "artist-id"},
-		Tracks: []string{"Give Me Everything", "Timber"},
+		Tracks: []domain.Track{{Name: "Give Me Everything"}, {Name: "Timber"}},
 	}
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +384,7 @@ func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
+	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 	setlist := domain.Setlist{
 		Artist: domain.Artist{SpotifyID: "artist-id"},
-		Tracks: []string{"Known Song", "Unknown Song"},
+		Tracks: []domain.Track{{Name: "Known Song"}, {Name: "Unknown Song"}},
 	}
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -416,7 +416,7 @@ func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
+	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -428,7 +428,7 @@ func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
 	setlist := domain.Setlist{
 		Artist: domain.Artist{SpotifyID: "correct-artist"},
-		Tracks: []string{"Song"},
+		Tracks: []domain.Track{{Name: "Song"}},
 	}
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -441,7 +441,7 @@ func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
+	uris, err := a.GetSetlistTracks(context.Background(), "test-token", setlist, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -453,7 +453,7 @@ func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
 func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
 	setlist := domain.Setlist{
 		Artist: domain.Artist{SpotifyID: "artist-id"},
-		Tracks: []string{"Song"},
+		Tracks: []domain.Track{{Name: "Song"}},
 	}
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -464,7 +464,7 @@ func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
+	_, err := a.GetSetlistTracks(context.Background(), "test-token", setlist, false)
 	if err == nil {
 		t.Fatal("expected error for non-OK status, got nil")
 	}
@@ -476,7 +476,7 @@ func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
 func TestGetSetlistTracks_403NotRegistered(t *testing.T) {
 	setlist := domain.Setlist{
 		Artist: domain.Artist{SpotifyID: "artist-id"},
-		Tracks: []string{"Song"},
+		Tracks: []domain.Track{{Name: "Song"}},
 	}
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -488,7 +488,7 @@ func TestGetSetlistTracks_403NotRegistered(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.GetSetlistTracks(context.Background(), "test-token", setlist)
+	_, err := a.GetSetlistTracks(context.Background(), "test-token", setlist, false)
 	if err == nil {
 		t.Fatal("expected error for 403 not registered, got nil")
 	}
@@ -511,7 +511,7 @@ func TestGetSetlistTracks_SendsBearerToken(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	a.GetSetlistTracks(context.Background(), "test-access-token", domain.Setlist{Tracks: []string{"Song"}})
+	a.GetSetlistTracks(context.Background(), "test-access-token", domain.Setlist{Tracks: []domain.Track{{Name: "Song"}}}, false)
 
 	if !strings.HasPrefix(gotAuth, "Bearer ") {
 		t.Errorf("expected Bearer token, got: %s", gotAuth)
@@ -715,7 +715,7 @@ func TestCreatePlaylist_MalformedJSON(t *testing.T) {
 func TestGetSetlistTracks_401InvalidToken(t *testing.T) {
 	setlist := domain.Setlist{
 		Artist: domain.Artist{SpotifyID: "artist-id"},
-		Tracks: []string{"Song"},
+		Tracks: []domain.Track{{Name: "Song"}},
 	}
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -726,7 +726,7 @@ func TestGetSetlistTracks_401InvalidToken(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	_, err := a.GetSetlistTracks(context.Background(), "expired-token", setlist)
+	_, err := a.GetSetlistTracks(context.Background(), "expired-token", setlist, false)
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
 	}
@@ -774,7 +774,7 @@ func TestSearchTrack_429RetriesAfterDelay(t *testing.T) {
 	a.sleepFn = func(d time.Duration) { sleptFor.Add(int64(d)) }
 
 	artist := domain.Artist{SpotifyID: "artist-id"}
-	uri, found, err := a.searchTrack(context.Background(), "token", "Song", artist)
+	uri, found, err := a.searchTrack(context.Background(), "token", domain.Track{Name: "Song"}, artist, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -812,7 +812,7 @@ func TestSearchTrack_429MissingRetryAfterDefaultsToOne(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 	a.sleepFn = func(d time.Duration) { sleptFor.Add(int64(d)) }
 
-	uri, found, err := a.searchTrack(context.Background(), "token", "Song", domain.Artist{SpotifyID: "artist-id"})
+	uri, found, err := a.searchTrack(context.Background(), "token", domain.Track{Name: "Song"}, domain.Artist{SpotifyID: "artist-id"}, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -828,7 +828,7 @@ func TestSearchTrack_429MissingRetryAfterDefaultsToOne(t *testing.T) {
 func TestGetSetlistTracks_PreservesOrder(t *testing.T) {
 	setlist := domain.Setlist{
 		Artist: domain.Artist{SpotifyID: "artist-id"},
-		Tracks: []string{"Alpha", "Beta", "Gamma"},
+		Tracks: []domain.Track{{Name: "Alpha"}, {Name: "Beta"}, {Name: "Gamma"}},
 	}
 
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -850,7 +850,7 @@ func TestGetSetlistTracks_PreservesOrder(t *testing.T) {
 	a := newTestAccountsAdapter(t, "")
 	a.apiBaseURL = apiSrv.URL
 
-	uris, err := a.GetSetlistTracks(context.Background(), "token", setlist)
+	uris, err := a.GetSetlistTracks(context.Background(), "token", setlist, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -862,5 +862,139 @@ func TestGetSetlistTracks_PreservesOrder(t *testing.T) {
 		if uris[i] != w {
 			t.Errorf("position %d: expected %s, got %s", i, w, uris[i])
 		}
+	}
+}
+
+func TestSearchTrack_CoverFallback_FindsOriginal(t *testing.T) {
+	var callCount atomic.Int32
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		w.Header().Set("Content-Type", "application/json")
+		callCount.Add(1)
+		if strings.Contains(q, "Metallica") {
+			json.NewEncoder(w).Encode(makeSearchResponse("Whiplash", "spotify:track:whiplash", "metallica-id"))
+		} else {
+			json.NewEncoder(w).Encode(spotifySearchResponse{})
+		}
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
+	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found via cover fallback")
+	}
+	if uri != "spotify:track:whiplash" {
+		t.Errorf("unexpected URI: %s", uri)
+	}
+	if callCount.Load() != 2 {
+		t.Errorf("expected 2 requests (original + cover fallback), got %d", callCount.Load())
+	}
+}
+
+func TestSearchTrack_CoverFallback_DisabledDoesNotRetry(t *testing.T) {
+	var callCount atomic.Int32
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(spotifySearchResponse{})
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
+	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	_, found, err := a.searchTrack(context.Background(), "token", track, artist, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Fatal("expected track not to be found when cover fallback disabled")
+	}
+	if callCount.Load() != 1 {
+		t.Errorf("expected 1 request (no cover retry), got %d", callCount.Load())
+	}
+}
+
+func TestSearchTrack_CoverFallback_EmptyCoveredArtistDoesNotRetry(t *testing.T) {
+	var callCount atomic.Int32
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(spotifySearchResponse{})
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Some Song", CoveredArtistName: ""}
+	artist := domain.Artist{Name: "Artist", SpotifyID: "artist-id"}
+	_, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Fatal("expected track not to be found when CoveredArtistName is empty")
+	}
+	if callCount.Load() != 1 {
+		t.Errorf("expected 1 request (no cover retry when CoveredArtistName empty), got %d", callCount.Load())
+	}
+}
+
+func TestSearchTrack_CoverFallback_429RetryPolicy(t *testing.T) {
+	var callCount atomic.Int32
+	var sleptFor atomic.Int64
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := callCount.Add(1)
+		q := r.URL.Query().Get("q")
+		if !strings.Contains(q, "Metallica") {
+			// First search (original artist): no results.
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(spotifySearchResponse{})
+			return
+		}
+		// Cover fallback: first attempt is 429, second succeeds.
+		if n == 2 {
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(makeSearchResponse("Whiplash", "spotify:track:whiplash", "metallica-id"))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+	a.sleepFn = func(d time.Duration) { sleptFor.Add(int64(d)) }
+
+	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
+	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found after cover fallback retry")
+	}
+	if uri != "spotify:track:whiplash" {
+		t.Errorf("unexpected URI: %s", uri)
+	}
+	if sleptFor.Load() != int64(2*time.Second) {
+		t.Errorf("expected sleep of 2s for cover fallback 429, got %v", time.Duration(sleptFor.Load()))
 	}
 }

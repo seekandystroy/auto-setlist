@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,11 +15,16 @@ import (
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: auto-setlist <artist name>")
+	var includeCovers bool
+	flag.BoolVar(&includeCovers, "include-covers", false, "include cover songs from the original artist when searching Spotify")
+	flag.BoolVar(&includeCovers, "ic", false, "shorthand for --include-covers")
+	flag.Parse()
+
+	if flag.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "usage: auto-setlist [--include-covers] <artist name>")
 		os.Exit(1)
 	}
-	artistName := strings.Join(os.Args[1:], " ")
+	artistName := strings.Join(flag.Args(), " ")
 
 	apiKey := os.Getenv("SETLISTFM_API_KEY")
 	if apiKey == "" {
@@ -45,7 +51,7 @@ func main() {
 		adapters.NewMusicbrainzAdapter(),
 	)
 
-	playlistID, err := svc.SetlistToPlaylist(context.Background(), artistName)
+	playlistID, err := svc.SetlistToPlaylist(context.Background(), artistName, includeCovers)
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)

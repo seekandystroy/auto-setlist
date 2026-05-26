@@ -152,8 +152,8 @@ func (a *spotifyAdapter) GetValidToken() (string, error) {
 	return tok.AccessToken, nil
 }
 
-func (a *spotifyAdapter) GetSetlistTracks(ctx context.Context, token string, setlist domain.Setlist) ([]string, error) {
-	applog.LoggerFromCtx(ctx).Info("Searching for tracks on Spotify", "count", len(setlist.Tracks))
+func (a *spotifyAdapter) GetSetlistTracks(ctx context.Context, token string, setlist domain.Setlist, includeCovers bool) ([]string, error) {
+	applog.LoggerFromCtx(ctx).Info("Searching for tracks on Spotify", "include_covers", includeCovers, "count", len(setlist.Tracks))
 
 	type result struct {
 		uri   string
@@ -164,13 +164,13 @@ func (a *spotifyAdapter) GetSetlistTracks(ctx context.Context, token string, set
 	results := make([]result, len(setlist.Tracks))
 	var wg sync.WaitGroup
 
-	for i, trackName := range setlist.Tracks {
+	for i, track := range setlist.Tracks {
 		wg.Add(1)
-		go func(idx int, name string) {
+		go func(idx int, t domain.Track) {
 			defer wg.Done()
-			uri, found, err := a.searchTrack(ctx, token, name, setlist.Artist)
+			uri, found, err := a.searchTrack(ctx, token, t, setlist.Artist, includeCovers)
 			results[idx] = result{uri: uri, found: found, err: err}
-		}(i, trackName)
+		}(i, track)
 	}
 
 	wg.Wait()
@@ -260,23 +260,17 @@ func (a *spotifyAdapter) addTracksToPlaylist(token, playlistID string, uris []st
 	return nil
 }
 
-func (a *spotifyAdapter) searchTrack(ctx context.Context, token, trackName string, artist domain.Artist) (string, bool, error) {
-	params := url.Values{
-		"q":     {fmt.Sprintf("track:%s artist:%s", trackName, artist.Name)},
-		"type":  {"track"},
-		"limit": {"5"},
-	}
-
+func (a *spotifyAdapter) doSearchLoop(ctx context.Context, token string, params url.Values) (spotifySearchResponse, error) {
 	for {
 		req, err := http.NewRequest(http.MethodGet, a.apiBaseURL+"/search?"+params.Encode(), nil)
 		if err != nil {
-			return "", false, fmt.Errorf("spotify: building search request: %w", err)
+			return spotifySearchResponse{}, fmt.Errorf("spotify: building search request: %w", err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := a.httpClient.Do(req)
 		if err != nil {
-			return "", false, fmt.Errorf("spotify: executing search request: %w", err)
+			return spotifySearchResponse{}, fmt.Errorf("spotify: executing search request: %w", err)
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests {
@@ -285,9 +279,7 @@ func (a *spotifyAdapter) searchTrack(ctx context.Context, token, trackName strin
 			if secs <= 0 {
 				secs = 1
 			}
-
 			applog.LoggerFromCtx(ctx).Warn("Search tracks rate limited, waiting and retrying", "wait", secs)
-
 			a.sleepFn(time.Duration(secs) * time.Second)
 			continue
 		}
@@ -297,32 +289,64 @@ func (a *spotifyAdapter) searchTrack(ctx context.Context, token, trackName strin
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode == http.StatusForbidden && strings.Contains(string(body), "The user is not registered for this application. Please check your settings on https://developer.spotify.com/dashboard.") {
-				return "", false, errors.New(errNotRegisteredMsg)
+				return spotifySearchResponse{}, errors.New(errNotRegisteredMsg)
 			}
 			var errResp spotifyErrorResponse
 			if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil && errResp.Error.Message != "" {
-				return "", false, fmt.Errorf("spotify: unexpected status %d from search: %s", resp.StatusCode, errResp.Error.Message)
+				return spotifySearchResponse{}, fmt.Errorf("spotify: unexpected status %d from search: %s", resp.StatusCode, errResp.Error.Message)
 			}
-			return "", false, fmt.Errorf("spotify: unexpected status %d from search", resp.StatusCode)
+			return spotifySearchResponse{}, fmt.Errorf("spotify: unexpected status %d from search", resp.StatusCode)
 		}
 
 		var result spotifySearchResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			return "", false, fmt.Errorf("spotify: decoding search response: %w", err)
+			return spotifySearchResponse{}, fmt.Errorf("spotify: decoding search response: %w", err)
 		}
+		return result, nil
+	}
+}
 
-		for _, item := range result.Tracks.Items {
-			if !strings.EqualFold(item.Name, trackName) {
-				continue
-			}
-			for _, a := range item.Artists {
-				if a.ID == artist.SpotifyID {
-					return item.URI, true, nil
-				}
+func (a *spotifyAdapter) searchTrack(ctx context.Context, token string, track domain.Track, artist domain.Artist, fetchOriginalIfCover bool) (string, bool, error) {
+	params := url.Values{
+		"q":     {fmt.Sprintf("track:%s artist:%s", track.Name, artist.Name)},
+		"type":  {"track"},
+		"limit": {"5"},
+	}
+
+	result, err := a.doSearchLoop(ctx, token, params)
+	if err != nil {
+		return "", false, err
+	}
+	for _, item := range result.Tracks.Items {
+		if !strings.EqualFold(item.Name, track.Name) {
+			continue
+		}
+		for _, a := range item.Artists {
+			if a.ID == artist.SpotifyID {
+				return item.URI, true, nil
 			}
 		}
+	}
+
+	if !fetchOriginalIfCover || track.CoveredArtistName == "" {
 		return "", false, nil
 	}
+
+	coverParams := url.Values{
+		"q":     {fmt.Sprintf("track:%s artist:%s", track.Name, track.CoveredArtistName)},
+		"type":  {"track"},
+		"limit": {"5"},
+	}
+	coverResult, err := a.doSearchLoop(ctx, token, coverParams)
+	if err != nil {
+		return "", false, err
+	}
+	for _, item := range coverResult.Tracks.Items {
+		if strings.EqualFold(item.Name, track.Name) {
+			return item.URI, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 func (a *spotifyAdapter) buildAuthURL(state string) string {

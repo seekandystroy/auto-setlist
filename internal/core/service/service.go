@@ -18,15 +18,15 @@ func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify, musicbrainz po
 	return &service{setlistfm: setlistfm, spotify: spotify, musicbrainz: musicbrainz}
 }
 
-func (s *service) SetlistToPlaylist(ctx context.Context, artistName string) (string, error) {
+func (s *service) SetlistToPlaylist(ctx context.Context, artistName string, includeCovers bool) (string, error) {
 	token, err := s.spotify.GetValidToken()
 	if err != nil {
 		return "", fmt.Errorf("service: getting spotify token: %w", err)
 	}
-	return s.SetlistToPlaylistAuthed(ctx, artistName, token)
+	return s.SetlistToPlaylistAuthed(ctx, artistName, token, includeCovers)
 }
 
-func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token string) (string, error) {
+func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token string, includeCovers bool) (string, error) {
 	if artistName == "" {
 		return "", fmt.Errorf("artist name must not be empty")
 	}
@@ -64,7 +64,7 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token
 		return "", fmt.Errorf("no non-empty setlists found for %q", artistName)
 	}
 
-	uris, err := s.spotify.GetSetlistTracks(ctx, token, *setlist)
+	uris, err := s.spotify.GetSetlistTracks(ctx, token, *setlist, includeCovers)
 	if err != nil {
 		return "", err
 	}

@@ -35,8 +35,13 @@ type setlistfmSearchResult struct {
 	Artists      []setlistfmArtist `json:"artist"`
 }
 
-type setlistfmSong struct {
+type setlistfmCoverArtist struct {
 	Name string `json:"name"`
+}
+
+type setlistfmSong struct {
+	Name  string                `json:"name"`
+	Cover *setlistfmCoverArtist `json:"cover,omitempty"`
 }
 
 type setlistfmSet struct {
@@ -144,12 +149,17 @@ func (c *setlistfmAdapter) GetSetlists(ctx context.Context, artist domain.Artist
 
 		setlists := make([]domain.Setlist, len(result.Setlists))
 		for i, sl := range result.Setlists {
-			var tracks []string
+			var tracks []domain.Track
 			for _, set := range sl.Sets.Set {
 				for _, song := range set.Songs {
-					if song.Name != "" {
-						tracks = append(tracks, song.Name)
+					if song.Name == "" {
+						continue
 					}
+					var coverName string
+					if song.Cover != nil {
+						coverName = song.Cover.Name
+					}
+					tracks = append(tracks, domain.Track{Name: song.Name, CoveredArtistName: coverName})
 				}
 			}
 			setlists[i] = domain.Setlist{Artist: artist, Tracks: tracks}
