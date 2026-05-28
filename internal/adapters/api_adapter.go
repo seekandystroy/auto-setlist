@@ -34,6 +34,7 @@ func NewAPIAdapter(svc ports.SetlistService) http.Handler {
 type setlistJobRequest struct {
 	Artist        string `json:"artist"`
 	IncludeCovers bool   `json:"include_covers"`
+	TourPlaylist  bool   `json:"tour_playlist"`
 }
 
 type setlistJobResponse struct {
@@ -57,7 +58,9 @@ func (a *apiAdapter) handleSetlistJob(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("request", "method", r.Method, "path", r.URL.Path)
 	var detail string
-	defer func() { logger.Info("response", "method", r.Method, "path", r.URL.Path, "status", sr.status, "detail", detail) }()
+	defer func() {
+		logger.Info("response", "method", r.Method, "path", r.URL.Path, "status", sr.status, "detail", detail)
+	}()
 
 	if token == "" {
 		detail = "missing Autosetlist-Spotify-Token header"
@@ -82,7 +85,7 @@ func (a *apiAdapter) handleSetlistJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
 		return
 	}
-	id, err := a.svc.SetlistToPlaylistAuthed(ctx, req.Artist, token, req.IncludeCovers)
+	id, err := a.svc.SetlistToPlaylistAuthed(ctx, req.Artist, token, req.IncludeCovers, req.TourPlaylist)
 	if err != nil {
 		detail = err.Error()
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": detail})

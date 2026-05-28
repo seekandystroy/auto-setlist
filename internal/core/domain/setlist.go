@@ -8,4 +8,5 @@ type Track struct {
 type Setlist struct {
 	Artist Artist
 	Tracks []Track
+	Tour   string
 }

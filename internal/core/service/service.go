@@ -18,15 +18,15 @@ func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify, musicbrainz po
 	return &service{setlistfm: setlistfm, spotify: spotify, musicbrainz: musicbrainz}
 }
 
-func (s *service) SetlistToPlaylist(ctx context.Context, artistName string, includeCovers bool) (string, error) {
+func (s *service) SetlistToPlaylist(ctx context.Context, artistName string, includeCovers, tourPlaylist bool) (string, error) {
 	token, err := s.spotify.GetValidToken()
 	if err != nil {
 		return "", fmt.Errorf("service: getting spotify token: %w", err)
 	}
-	return s.SetlistToPlaylistAuthed(ctx, artistName, token, includeCovers)
+	return s.SetlistToPlaylistAuthed(ctx, artistName, token, includeCovers, tourPlaylist)
 }
 
-func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token string, includeCovers bool) (string, error) {
+func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token string, includeCovers, tourPlaylist bool) (string, error) {
 	if artistName == "" {
 		return "", fmt.Errorf("artist name must not be empty")
 	}
@@ -64,6 +64,18 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token
 		return "", fmt.Errorf("no non-empty setlists found for %q", artistName)
 	}
 
+	if tourPlaylist && setlist.Tour != "" {
+		tourSetlists, err := s.setlistfm.GetSetlistsForTour(ctx, artist, setlist.Tour)
+		if err != nil {
+			return "", fmt.Errorf("fetching setlists for tour %q: %w", setlist.Tour, err)
+		}
+		setlist = &domain.Setlist{
+			Artist: artist,
+			Tour:   setlist.Tour,
+			Tracks: mergeSetlistTracks(tourSetlists),
+		}
+	}
+
 	uris, err := s.spotify.GetSetlistTracks(ctx, token, *setlist, includeCovers)
 	if err != nil {
 		return "", err
@@ -75,6 +87,33 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token
 	}
 
 	return playlistID, nil
+}
+
+func mergeSetlistTracks(setlists []domain.Setlist) []domain.Track {
+	seen := make(map[string]bool)
+	var result []domain.Track
+
+	maxLen := 0
+	for _, s := range setlists {
+		if len(s.Tracks) > maxLen {
+			maxLen = len(s.Tracks)
+		}
+	}
+
+	for i := range maxLen {
+		for _, sl := range setlists {
+			if i >= len(sl.Tracks) {
+				continue
+			}
+			track := sl.Tracks[i]
+			key := track.Name
+			if !seen[key] {
+				seen[key] = true
+				result = append(result, track)
+			}
+		}
+	}
+	return result
 }
 
 func (s *service) searchArtists(ctx context.Context, artistName string) ([]domain.Artist, error) {

@@ -41,6 +41,17 @@
             performing artist does not have a recording of that song.
           </div>
         </div>
+        <div class="field mt-3">
+          <label class="checkbox">
+            <input id="tour-playlist" type="checkbox">
+            Tour mode
+          </label>
+          <button title="Creates a playlist with all songs this artist has played in their current tour."
+            popovertarget="tour-info" class="tag is-rounded is-info is-light ml-2">?</button>
+          <div id="tour-info" popover>
+            Creates a playlist with all songs this artist has played in their current tour.
+          </div>
+        </div>
 
         <div id="result" class="mt-4"></div>
       </div>

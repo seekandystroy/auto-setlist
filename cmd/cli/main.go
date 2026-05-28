@@ -16,8 +16,11 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	var includeCovers bool
+	var tourPlaylist bool
 	flag.BoolVar(&includeCovers, "include-covers", false, "include cover songs from the original artist when searching Spotify")
 	flag.BoolVar(&includeCovers, "ic", false, "shorthand for --include-covers")
+	flag.BoolVar(&tourPlaylist, "tour-playlist", false, "build a playlist from all songs played across the latest tour")
+	flag.BoolVar(&tourPlaylist, "tp", false, "shorthand for --tour-playlist")
 	flag.Parse()
 
 	if flag.NArg() < 1 {
@@ -51,7 +54,7 @@ func main() {
 		adapters.NewMusicbrainzAdapter(),
 	)
 
-	playlistID, err := svc.SetlistToPlaylist(context.Background(), artistName, includeCovers)
+	playlistID, err := svc.SetlistToPlaylist(context.Background(), artistName, includeCovers, tourPlaylist)
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)

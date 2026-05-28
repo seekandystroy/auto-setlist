@@ -623,7 +623,7 @@ func TestCreatePlaylist_AddTracksNonOKStatus(t *testing.T) {
 	}
 }
 
-func TestCreatePlaylist_PlaylistName(t *testing.T) {
+func TestCreatePlaylist_PlaylistNameWithoutTour(t *testing.T) {
 	var gotBody spotifyCreatePlaylistRequest
 	setlist := domain.Setlist{Artist: domain.Artist{Name: "Pitbull"}}
 
@@ -640,6 +640,31 @@ func TestCreatePlaylist_PlaylistName(t *testing.T) {
 	a.CreatePlaylist(context.Background(), "test-token", setlist, nil)
 
 	wantName := "Pitbull setlist by auto-setlist"
+	if gotBody.Name != wantName {
+		t.Errorf("expected name %q, got %q", wantName, gotBody.Name)
+	}
+	if gotBody.Description != "auto-generated" {
+		t.Errorf("expected description %q, got %q", "auto-generated", gotBody.Description)
+	}
+}
+
+func TestCreatePlaylist_PlaylistNameWithTour(t *testing.T) {
+	var gotBody spotifyCreatePlaylistRequest
+	setlist := domain.Setlist{Artist: domain.Artist{Name: "Pitbull"}, Tour: "Worldwide"}
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(spotifyPlaylist{ID: "x"})
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	a.CreatePlaylist(context.Background(), "test-token", setlist, nil)
+
+	wantName := "Pitbull - Worldwide setlist by auto-setlist"
 	if gotBody.Name != wantName {
 		t.Errorf("expected name %q, got %q", wantName, gotBody.Name)
 	}

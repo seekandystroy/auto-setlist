@@ -326,6 +326,59 @@ func TestGetSetlists_ParsesCoverSong(t *testing.T) {
 	}
 }
 
+func TestGetSetlists_ParsesTourName(t *testing.T) {
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{
+				Sets: setlistfmSets{Set: []setlistfmSet{
+					{Songs: []setlistfmSong{{Name: "Song A"}}},
+				}},
+				Tour: &setlistfmTour{Name: "World Tour 2025"},
+			},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].Tour != "World Tour 2025" {
+		t.Errorf("expected Tour %q, got %q", "World Tour 2025", result[0].Tour)
+	}
+}
+
+func TestGetSetlists_NoTourLeavesEmpty(t *testing.T) {
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{Sets: setlistfmSets{Set: []setlistfmSet{
+				{Songs: []setlistfmSong{{Name: "Song A"}}},
+			}}},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].Tour != "" {
+		t.Errorf("expected empty Tour, got %q", result[0].Tour)
+	}
+}
+
 func TestGetSetlists_CoverAbsentLeavesEmpty(t *testing.T) {
 	response := setlistfmSetlistsResponse{
 		Setlists: []setlistfmSetlist{
@@ -348,6 +401,133 @@ func TestGetSetlists_CoverAbsentLeavesEmpty(t *testing.T) {
 	}
 	if result[0].Tracks[0].CoveredArtistName != "" {
 		t.Errorf("expected empty CoveredArtistName, got %q", result[0].Tracks[0].CoveredArtistName)
+	}
+}
+
+func TestGetSetlistsForTour_HappyPath(t *testing.T) {
+	var gotPath string
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{
+				Sets: setlistfmSets{Set: []setlistfmSet{
+					{Songs: []setlistfmSong{{Name: "Song A"}, {Name: "Song B"}}},
+				}},
+				Tour: &setlistfmTour{Name: "Big Tour"},
+			},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlistsForTour(context.Background(), domain.Artist{MBID: "abc123", Name: "Sprout"}, "Big Tour")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected 1 setlist, got %d", len(result))
+	}
+	if len(result[0].Tracks) != 2 {
+		t.Errorf("expected 2 tracks, got %d", len(result[0].Tracks))
+	}
+	if result[0].Tour != "Big Tour" {
+		t.Errorf("expected Tour %q, got %q", "Big Tour", result[0].Tour)
+	}
+	if !strings.Contains(gotPath, "artistMbid=abc123") {
+		t.Errorf("expected artistMbid in query, got %q", gotPath)
+	}
+	if !strings.Contains(gotPath, "tourName=Big+Tour") && !strings.Contains(gotPath, "tourName=Big%20Tour") {
+		t.Errorf("expected tourName in query, got %q", gotPath)
+	}
+}
+
+func TestGetSetlistsForTour_NonOKStatus(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusInternalServerError} {
+		status := status
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer srv.Close()
+
+			adapter := newTestAdapter(srv.URL)
+			_, err := adapter.GetSetlistsForTour(context.Background(), domain.Artist{MBID: "abc123"}, "Some Tour")
+			if err == nil {
+				t.Fatalf("expected error for status %d, got nil", status)
+			}
+			if !strings.Contains(err.Error(), "unexpected status") {
+				t.Errorf("expected 'unexpected status' in error, got %q", err.Error())
+			}
+		})
+	}
+}
+
+func TestGetSetlistsForTour_NetworkError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	_, err := adapter.GetSetlistsForTour(context.Background(), domain.Artist{MBID: "abc123"}, "Some Tour")
+	if err == nil {
+		t.Fatal("expected network error, got nil")
+	}
+	if !strings.Contains(err.Error(), "executing request") {
+		t.Errorf("expected 'executing request' in error, got %q", err.Error())
+	}
+}
+
+func TestGetSetlistsForTour_MalformedJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("not json {{{"))
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	_, err := adapter.GetSetlistsForTour(context.Background(), domain.Artist{MBID: "abc123"}, "Some Tour")
+	if err == nil {
+		t.Fatal("expected decode error, got nil")
+	}
+	if !strings.Contains(err.Error(), "decoding response") {
+		t.Errorf("expected 'decoding response' in error, got %q", err.Error())
+	}
+}
+
+func TestGetSetlistsForTour_RetriesOnFailureThenSucceeds(t *testing.T) {
+	response := setlistfmSetlistsResponse{
+		Setlists: []setlistfmSetlist{
+			{Sets: setlistfmSets{Set: []setlistfmSet{
+				{Songs: []setlistfmSong{{Name: "Song A"}}},
+			}}},
+		},
+	}
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlistsForTour(context.Background(), domain.Artist{MBID: "abc123"}, "Some Tour")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts, got %d", attempts)
+	}
+	if len(result[0].Tracks) != 1 || result[0].Tracks[0].Name != "Song A" {
+		t.Errorf("unexpected result: %+v", result)
 	}
 }
 

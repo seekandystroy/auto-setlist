@@ -103,6 +103,7 @@ const input = document.getElementById('artist');
 const submitBtn = document.getElementById('submit');
 const result = document.getElementById('result');
 const includeCoversCheckbox = document.getElementById('include-covers');
+const tourPlaylistCheckbox = document.getElementById('tour-playlist');
 
 function showMain() {
   connectBtn.style.display = 'none';
@@ -152,6 +153,7 @@ function onInputChange() {
 
 input.addEventListener('input', onInputChange);
 includeCoversCheckbox.addEventListener('change', onInputChange);
+tourPlaylistCheckbox.addEventListener('change', onInputChange);
 
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !submitBtn.disabled) submitBtn.click();
@@ -178,7 +180,7 @@ submitBtn.addEventListener('click', async () => {
         'Content-Type': 'application/json',
         'Autosetlist-Spotify-Token': token,
       },
-      body: JSON.stringify({ artist: input.value.trim(), include_covers: includeCoversCheckbox.checked }),
+      body: JSON.stringify({ artist: input.value.trim(), include_covers: includeCoversCheckbox.checked, tour_playlist: tourPlaylistCheckbox.checked }),
     });
     const data = await resp.json();
     if (!resp.ok) {

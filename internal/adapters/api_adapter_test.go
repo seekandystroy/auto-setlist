@@ -11,18 +11,21 @@ import (
 )
 
 type mockSetlistService struct {
-	playlistID           string
-	err                  error
-	receivedIncludeCovers bool
+	playlistID                     string
+	err                            error
+	receivedIncludeCovers          bool
+	receivedAllSongsFromLatestTour bool
 }
 
-func (m *mockSetlistService) SetlistToPlaylist(_ context.Context, artist string, includeCovers bool) (string, error) {
+func (m *mockSetlistService) SetlistToPlaylist(_ context.Context, artist string, includeCovers, tourPlaylist bool) (string, error) {
 	m.receivedIncludeCovers = includeCovers
+	m.receivedAllSongsFromLatestTour = tourPlaylist
 	return m.playlistID, m.err
 }
 
-func (m *mockSetlistService) SetlistToPlaylistAuthed(_ context.Context, artist, token string, includeCovers bool) (string, error) {
+func (m *mockSetlistService) SetlistToPlaylistAuthed(_ context.Context, artist, token string, includeCovers, tourPlaylist bool) (string, error) {
 	m.receivedIncludeCovers = includeCovers
+	m.receivedAllSongsFromLatestTour = tourPlaylist
 	return m.playlistID, m.err
 }
 
@@ -180,5 +183,25 @@ func TestSetlistJob_IncludeCoversTrue(t *testing.T) {
 
 	if !svc.receivedIncludeCovers {
 		t.Error("expected includeCovers=true to be forwarded to service, got false")
+	}
+}
+
+func TestSetlistJob_AllSongsFromLatestTourDefaultsFalse(t *testing.T) {
+	svc := &mockSetlistService{playlistID: "abc123"}
+	handler := NewAPIAdapter(svc)
+	post(handler, `{"artist":"Hellripper"}`)
+
+	if svc.receivedAllSongsFromLatestTour {
+		t.Error("expected tourPlaylist to default to false when omitted, got true")
+	}
+}
+
+func TestSetlistJob_AllSongsFromLatestTourTrue(t *testing.T) {
+	svc := &mockSetlistService{playlistID: "abc123"}
+	handler := NewAPIAdapter(svc)
+	post(handler, `{"artist":"Hellripper","tour_playlist":true}`)
+
+	if !svc.receivedAllSongsFromLatestTour {
+		t.Error("expected tourPlaylist=true to be forwarded to service, got false")
 	}
 }
