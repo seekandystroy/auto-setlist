@@ -354,12 +354,14 @@ func TestBuildAuthURL_ContainsRequiredParams(t *testing.T) {
 	}
 }
 
-func makeSearchResponse(name, uri, artistID string) spotifySearchResponse {
+func makeSearchResponse(tracks [][3]string) spotifySearchResponse {
+	items := make([]spotifySearchTrack, len(tracks))
+	for i, t := range tracks {
+		items[i] = spotifySearchTrack{Name: t[0], URI: t[1], Artists: []spotifySearchArtist{{ID: t[2]}}}
+	}
 	return spotifySearchResponse{Tracks: struct {
 		Items []spotifySearchTrack `json:"items"`
-	}{Items: []spotifySearchTrack{
-		{Name: name, URI: uri, Artists: []spotifySearchArtist{{ID: artistID}}},
-	}}}
+	}{Items: items}}
 }
 
 func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
@@ -372,9 +374,9 @@ func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 		q := r.URL.Query().Get("q")
 		var resp spotifySearchResponse
 		if strings.Contains(q, "Give+Me+Everything") || strings.Contains(q, "Give Me Everything") {
-			resp = makeSearchResponse("Give Me Everything", "spotify:track:uri1", "artist-id")
+			resp = makeSearchResponse([][3]string{{"Give Me Everything", "spotify:track:uri1", "artist-id"}})
 		} else {
-			resp = makeSearchResponse("Timber", "spotify:track:uri2", "artist-id")
+			resp = makeSearchResponse([][3]string{{"Timber", "spotify:track:uri2", "artist-id"}})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
@@ -406,7 +408,7 @@ func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 		q := r.URL.Query().Get("q")
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(q, "Known") {
-			json.NewEncoder(w).Encode(makeSearchResponse("Known Song", "spotify:track:uri1", "artist-id"))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Known Song", "spotify:track:uri1", "artist-id"}}))
 		} else {
 			json.NewEncoder(w).Encode(spotifySearchResponse{})
 		}
@@ -434,7 +436,7 @@ func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
 	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// Returns a track with the right name but wrong artist ID.
-		json.NewEncoder(w).Encode(makeSearchResponse("Song", "spotify:track:uri1", "wrong-artist"))
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Song", "spotify:track:uri1", "wrong-artist"}}))
 	}))
 	defer apiSrv.Close()
 
@@ -790,7 +792,7 @@ func TestSearchTrack_429RetriesAfterDelay(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(makeSearchResponse("Song", "spotify:track:uri1", "artist-id"))
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Song", "spotify:track:uri1", "artist-id"}}))
 	}))
 	defer apiSrv.Close()
 
@@ -829,7 +831,7 @@ func TestSearchTrack_429MissingRetryAfterDefaultsToOne(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(makeSearchResponse("Song", "spotify:track:uri1", "artist-id"))
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Song", "spotify:track:uri1", "artist-id"}}))
 	}))
 	defer apiSrv.Close()
 
@@ -861,13 +863,13 @@ func TestGetSetlistTracks_PreservesOrder(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(q, "Alpha"):
-			json.NewEncoder(w).Encode(makeSearchResponse("Alpha", "spotify:track:alpha", "artist-id"))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Alpha", "spotify:track:alpha", "artist-id"}}))
 		case strings.Contains(q, "Beta"):
 			// Simulate Beta being slower to verify ordering is index-based, not arrival-based.
 			time.Sleep(10 * time.Millisecond)
-			json.NewEncoder(w).Encode(makeSearchResponse("Beta", "spotify:track:beta", "artist-id"))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Beta", "spotify:track:beta", "artist-id"}}))
 		case strings.Contains(q, "Gamma"):
-			json.NewEncoder(w).Encode(makeSearchResponse("Gamma", "spotify:track:gamma", "artist-id"))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Gamma", "spotify:track:gamma", "artist-id"}}))
 		}
 	}))
 	defer apiSrv.Close()
@@ -890,6 +892,137 @@ func TestGetSetlistTracks_PreservesOrder(t *testing.T) {
 	}
 }
 
+func TestSearchTrack_MatchesDirectMatchOverVerboseNames(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{
+			{"Wasted Years - 2015 Remaster", "spotify:track:uri1", "Iron Maiden"},
+			{"Wasted Years", "spotify:track:correct-uri", "Iron Maiden"}}))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Wasted Years"}
+	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected uri spotify:track:correct-uri, got %s", uri)
+	}
+}
+
+func TestSearchTrack_MatchesVerboseRemasterIfNoDirectMatch(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{
+			{"Wasted Years - Harris Remix", "spotify:track:uri2", "Iron Maiden"},
+			{"Wasted Years - Live in Lisbon", "spotify:track:uri3", "Iron Maiden"},
+			{"Wasted Years - 2015 Remaster", "spotify:track:correct-uri", "Iron Maiden"},
+			{"Wasted Years - Demo 1678", "spotify:track:uri4", "Iron Maiden"}}))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Wasted Years"}
+	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected uri spotify:track:correct-uri, got %s", uri)
+	}
+}
+
+func TestSearchTrack_MatchesVerboseLiveIfNoDirectMatchOrRemaster(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{
+			{"Wasted Years - Live in Lisbon", "spotify:track:correct-uri", "Iron Maiden"},
+			{"Wasted Years - Harris Remix", "spotify:track:uri3", "Iron Maiden"},
+			{"Wasted Years - Demo 1678", "spotify:track:uri4", "Iron Maiden"}}))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Wasted Years"}
+	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected uri spotify:track:correct-uri, got %s", uri)
+	}
+}
+
+func TestSearchTrack_MatchesVerboseRemixIfNoDirectMatchRemasterOrLive(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{
+			{"Wasted Years - Demo 1678", "spotify:track:uri4", "Iron Maiden"},
+			{"Wasted Years - Harris Remix", "spotify:track:correct-uri", "Iron Maiden"}}))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Wasted Years"}
+	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected uri spotify:track:correct-uri, got %s", uri)
+	}
+}
+
+func TestSearchTrack_MatchesVerboseSomethingElseIfNoDirectMatchRemasterRemixOrLive(t *testing.T) {
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Wasted Years - Demo 1678", "spotify:track:correct-uri", "Iron Maiden"}}))
+	}))
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Wasted Years"}
+	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected uri spotify:track:correct-uri, got %s", uri)
+	}
+}
+
 func TestSearchTrack_CoverFallback_FindsOriginal(t *testing.T) {
 	var callCount atomic.Int32
 
@@ -898,7 +1031,7 @@ func TestSearchTrack_CoverFallback_FindsOriginal(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		callCount.Add(1)
 		if strings.Contains(q, "Metallica") {
-			json.NewEncoder(w).Encode(makeSearchResponse("Whiplash", "spotify:track:whiplash", "metallica-id"))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Whiplash", "spotify:track:whiplash", "metallica-id"}}))
 		} else {
 			json.NewEncoder(w).Encode(spotifySearchResponse{})
 		}
@@ -979,6 +1112,140 @@ func TestSearchTrack_CoverFallback_EmptyCoveredArtistDoesNotRetry(t *testing.T) 
 	}
 }
 
+func makeCoverServer(t *testing.T, coverArtist string, coverItems [][3]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(q, coverArtist) {
+			json.NewEncoder(w).Encode(makeSearchResponse(coverItems))
+		} else {
+			json.NewEncoder(w).Encode(spotifySearchResponse{})
+		}
+	}))
+}
+
+func TestSearchTrack_CoverFallback_MatchesDirectMatchOverVerboseNames(t *testing.T) {
+	apiSrv := makeCoverServer(t, "Metallica", [][3]string{
+		{"Whiplash - Remastered", "spotify:track:uri1", "metallica-id"},
+		{"Whiplash", "spotify:track:correct-uri", "metallica-id"},
+	})
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
+	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected spotify:track:correct-uri, got %s", uri)
+	}
+}
+
+func TestSearchTrack_CoverFallback_MatchesVerboseRemasterIfNoDirectMatch(t *testing.T) {
+	apiSrv := makeCoverServer(t, "Metallica", [][3]string{
+		{"Whiplash - Live Shit", "spotify:track:uri2", "metallica-id"},
+		{"Whiplash - 2021 Remaster", "spotify:track:correct-uri", "metallica-id"},
+		{"Whiplash - Demo", "spotify:track:uri4", "metallica-id"},
+	})
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
+	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected spotify:track:correct-uri, got %s", uri)
+	}
+}
+
+func TestSearchTrack_CoverFallback_MatchesVerboseLiveIfNoDirectMatchOrRemaster(t *testing.T) {
+	apiSrv := makeCoverServer(t, "Metallica", [][3]string{
+		{"Whiplash - Live Shit", "spotify:track:correct-uri", "metallica-id"},
+		{"Whiplash - Kirk Remix", "spotify:track:uri3", "metallica-id"},
+		{"Whiplash - Demo", "spotify:track:uri4", "metallica-id"},
+	})
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
+	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected spotify:track:correct-uri, got %s", uri)
+	}
+}
+
+func TestSearchTrack_CoverFallback_MatchesVerboseRemixIfNoDirectMatchRemasterOrLive(t *testing.T) {
+	apiSrv := makeCoverServer(t, "Metallica", [][3]string{
+		{"Whiplash - Demo", "spotify:track:uri4", "metallica-id"},
+		{"Whiplash - Kirk Remix", "spotify:track:correct-uri", "metallica-id"},
+	})
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
+	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected spotify:track:correct-uri, got %s", uri)
+	}
+}
+
+func TestSearchTrack_CoverFallback_MatchesVerboseSomethingElseIfNoDirectMatchRemasterRemixOrLive(t *testing.T) {
+	apiSrv := makeCoverServer(t, "Metallica", [][3]string{
+		{"Whiplash - Demo", "spotify:track:correct-uri", "metallica-id"},
+	})
+	defer apiSrv.Close()
+
+	a := newTestAccountsAdapter(t, "")
+	a.apiBaseURL = apiSrv.URL
+
+	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
+	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected track to be found")
+	}
+	if uri != "spotify:track:correct-uri" {
+		t.Errorf("expected spotify:track:correct-uri, got %s", uri)
+	}
+}
+
 func TestSearchTrack_CoverFallback_429RetryPolicy(t *testing.T) {
 	var callCount atomic.Int32
 	var sleptFor atomic.Int64
@@ -999,7 +1266,7 @@ func TestSearchTrack_CoverFallback_429RetryPolicy(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(makeSearchResponse("Whiplash", "spotify:track:whiplash", "metallica-id"))
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Whiplash", "spotify:track:whiplash", "metallica-id"}}))
 	}))
 	defer apiSrv.Close()
 

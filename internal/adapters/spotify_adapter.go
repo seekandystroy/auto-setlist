@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -324,15 +325,10 @@ func (a *spotifyAdapter) searchTrack(ctx context.Context, token string, track do
 	if err != nil {
 		return "", false, err
 	}
-	for _, item := range result.Tracks.Items {
-		if !strings.EqualFold(item.Name, track.Name) {
-			continue
-		}
-		for _, a := range item.Artists {
-			if a.ID == artist.SpotifyID {
-				return item.URI, true, nil
-			}
-		}
+
+	uri, found, err := a.trackURIFromResponse(track.Name, &result, true, artist.SpotifyID)
+	if found {
+		return uri, found, err
 	}
 
 	if !fetchOriginalIfCover || track.CoveredArtistName == "" {
@@ -348,10 +344,46 @@ func (a *spotifyAdapter) searchTrack(ctx context.Context, token string, track do
 	if err != nil {
 		return "", false, err
 	}
-	for _, item := range coverResult.Tracks.Items {
-		if strings.EqualFold(item.Name, track.Name) {
-			return item.URI, true, nil
+
+	return a.trackURIFromResponse(track.Name, &coverResult, false, "")
+}
+
+func (a *spotifyAdapter) trackURIFromResponse(trackName string, resp *spotifySearchResponse, checkArtistID bool, artistID string) (string, bool, error) {
+	remasterIdx := -1
+	remixIdx := -1
+	liveIdx := -1
+	demoIdx := -1
+	for i, item := range resp.Tracks.Items {
+		after, found := strings.CutPrefix(item.Name, trackName)
+		if !found {
+			continue
 		}
+		if !checkArtistID || (checkArtistID && slices.ContainsFunc(item.Artists, func(artist spotifySearchArtist) bool { return artist.ID == artistID })) {
+			if after == "" {
+				return item.URI, true, nil
+			} else {
+				lcAfter := strings.ToLower(after)
+				if remasterIdx == -1 && strings.Contains(lcAfter, "remaster") {
+					remasterIdx = i
+				} else if liveIdx == -1 && strings.Contains(lcAfter, "live") {
+					liveIdx = i
+				} else if remixIdx == -1 && strings.Contains(lcAfter, "remix") {
+					remixIdx = i
+				} else if demoIdx == -1 {
+					demoIdx = i
+				}
+			}
+		}
+	}
+
+	if remasterIdx > -1 {
+		return resp.Tracks.Items[remasterIdx].URI, true, nil
+	} else if liveIdx > -1 {
+		return resp.Tracks.Items[liveIdx].URI, true, nil
+	} else if remixIdx > -1 {
+		return resp.Tracks.Items[remixIdx].URI, true, nil
+	} else if demoIdx > -1 {
+		return resp.Tracks.Items[demoIdx].URI, true, nil
 	}
 	return "", false, nil
 }
