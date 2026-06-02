@@ -102,8 +102,21 @@ const mainDiv = document.getElementById('main');
 const input = document.getElementById('artist');
 const submitBtn = document.getElementById('submit');
 const result = document.getElementById('result');
-const includeCoversCheckbox = document.getElementById('include-covers');
-const tourPlaylistCheckbox = document.getElementById('tour-playlist');
+const modeLatestBtn = document.getElementById('mode-latest');
+const modeTourBtn = document.getElementById('mode-tour');
+
+let tourMode = false;
+
+function setMode(tour) {
+  tourMode = tour;
+  modeLatestBtn.classList.toggle('is-selected', !tour);
+  modeLatestBtn.classList.toggle('is-primary', !tour);
+  modeTourBtn.classList.toggle('is-selected', tour);
+  modeTourBtn.classList.toggle('is-primary', tour);
+}
+
+modeLatestBtn.addEventListener('click', () => { setMode(false); onInputChange(); });
+modeTourBtn.addEventListener('click', () => { setMode(true); onInputChange(); });
 
 function showMain() {
   connectBtn.style.display = 'none';
@@ -152,8 +165,6 @@ function onInputChange() {
 }
 
 input.addEventListener('input', onInputChange);
-includeCoversCheckbox.addEventListener('change', onInputChange);
-tourPlaylistCheckbox.addEventListener('change', onInputChange);
 
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !submitBtn.disabled) submitBtn.click();
@@ -180,7 +191,7 @@ submitBtn.addEventListener('click', async () => {
         'Content-Type': 'application/json',
         'Autosetlist-Spotify-Token': token,
       },
-      body: JSON.stringify({ artist: input.value.trim(), include_covers: includeCoversCheckbox.checked, tour_playlist: tourPlaylistCheckbox.checked }),
+      body: JSON.stringify({ artist: input.value.trim(), include_covers: true, tour_playlist: tourMode }),
     });
     const data = await resp.json();
     if (!resp.ok) {
@@ -190,7 +201,7 @@ submitBtn.addEventListener('click', async () => {
       requestCompleted = true;
       submitBtn.textContent = 'Created!';
       submitBtn.disabled = true;
-      result.innerHTML = `<a href="${data.playlist_url}" class="button is-primary is-rounded" target="_blank">Listen on Spotify</a>`;
+      result.innerHTML = `<a href="${data.playlist_url}" class="button is-success is-medium is-rounded" target="_blank"><span class="icon"><i class="fab fa-spotify"></i></span><span>Listen on Spotify</span></a>`;
     }
   } catch (err) {
     requestCompleted = true;

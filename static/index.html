@@ -6,13 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>auto-setlist</title>
   <link rel="stylesheet" href="bulma.min.css">
+  <script src="https://kit.fontawesome.com/97a45bdf33.js" crossorigin="anonymous"></script>
 </head>
 
 <body>
   <section class="section">
     <div class="container" style="max-width: 480px">
       <h1 class="title">auto-setlist</h1>
-      <p class="subtitle">Create a Spotify playlist from an artist's latest setlist.</p>
+      <p class="subtitle">Spotify playlists from live setlists.</p>
 
       <button id="connect" class="button is-rounded is-success is-medium" style="display:none">
         Connect to Spotify
@@ -28,32 +29,15 @@
           </div>
         </div>
 
-        <div class="field mt-3">
-          <label class="checkbox">
-            <input id="include-covers" type="checkbox" checked>
-            Include covers' originals
-          </label>
-          <button
-            title="When enabled, cover songs in the setlist are added to the playlist as the original artist's version if the performing artist does not have a recording of that song."
-            popovertarget="covers-info" class="tag is-rounded is-info is-light ml-2">?</button>
-          <div id="covers-info" popover>
-            When enabled, cover songs in the setlist are added to the playlist as the original artist's version if the
-            performing artist does not have a recording of that song.
-          </div>
-        </div>
-        <div class="field mt-3">
-          <label class="checkbox">
-            <input id="tour-playlist" type="checkbox">
-            Tour mode
-          </label>
-          <button title="Creates a playlist with all songs this artist has played in their current tour."
-            popovertarget="tour-info" class="tag is-rounded is-info is-light ml-2">?</button>
-          <div id="tour-info" popover>
-            Creates a playlist with all songs this artist has played in their current tour.
+        <div class="mt-3">
+          <p>Songs from:</p>
+          <div class="buttons has-addons">
+            <button id="mode-latest" class="button is-selected is-primary">Latest show</button>
+            <button id="mode-tour" class="button">Whole tour</button>
           </div>
         </div>
 
-        <div id="result" class="mt-4"></div>
+        <div id="result" class="mt-5 buttons is-centered"></div>
       </div>
     </div>
   </section>
