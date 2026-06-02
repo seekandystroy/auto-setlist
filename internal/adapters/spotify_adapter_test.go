@@ -357,7 +357,7 @@ func TestBuildAuthURL_ContainsRequiredParams(t *testing.T) {
 func makeSearchResponse(tracks [][3]string) spotifySearchResponse {
 	items := make([]spotifySearchTrack, len(tracks))
 	for i, t := range tracks {
-		items[i] = spotifySearchTrack{Name: t[0], URI: t[1], Artists: []spotifySearchArtist{{ID: t[2]}}}
+		items[i] = spotifySearchTrack{Name: t[0], URI: t[1], Artists: []spotifySearchArtist{{Name: t[2]}}}
 	}
 	return spotifySearchResponse{Tracks: struct {
 		Items []spotifySearchTrack `json:"items"`
@@ -366,7 +366,7 @@ func makeSearchResponse(tracks [][3]string) spotifySearchResponse {
 
 func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 	setlist := domain.Setlist{
-		Artist: domain.Artist{MBID: "m1", Name: "Pitbull", SpotifyID: "artist-id"},
+		Artist: domain.Artist{MBID: "m1", Name: "Pitbull"},
 		Tracks: []domain.Track{{Name: "Give Me Everything"}, {Name: "Timber"}},
 	}
 
@@ -374,9 +374,9 @@ func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 		q := r.URL.Query().Get("q")
 		var resp spotifySearchResponse
 		if strings.Contains(q, "Give+Me+Everything") || strings.Contains(q, "Give Me Everything") {
-			resp = makeSearchResponse([][3]string{{"Give Me Everything", "spotify:track:uri1", "artist-id"}})
+			resp = makeSearchResponse([][3]string{{"Give Me Everything", "spotify:track:uri1", "Pitbull"}})
 		} else {
-			resp = makeSearchResponse([][3]string{{"Timber", "spotify:track:uri2", "artist-id"}})
+			resp = makeSearchResponse([][3]string{{"Timber", "spotify:track:uri2", "Pitbull"}})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
@@ -400,7 +400,7 @@ func TestGetSetlistTracks_ReturnsURIs(t *testing.T) {
 
 func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 	setlist := domain.Setlist{
-		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Artist: domain.Artist{Name: "Artist"},
 		Tracks: []domain.Track{{Name: "Known Song"}, {Name: "Unknown Song"}},
 	}
 
@@ -408,7 +408,7 @@ func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 		q := r.URL.Query().Get("q")
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(q, "Known") {
-			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Known Song", "spotify:track:uri1", "artist-id"}}))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Known Song", "spotify:track:uri1", "Artist"}}))
 		} else {
 			json.NewEncoder(w).Encode(spotifySearchResponse{})
 		}
@@ -429,7 +429,7 @@ func TestGetSetlistTracks_SkipsTrackNotFound(t *testing.T) {
 
 func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
 	setlist := domain.Setlist{
-		Artist: domain.Artist{SpotifyID: "correct-artist"},
+		Artist: domain.Artist{Name: "Artist"},
 		Tracks: []domain.Track{{Name: "Song"}},
 	}
 
@@ -454,7 +454,7 @@ func TestGetSetlistTracks_SkipsWrongArtist(t *testing.T) {
 
 func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
 	setlist := domain.Setlist{
-		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Artist: domain.Artist{Name: "Artist"},
 		Tracks: []domain.Track{{Name: "Song"}},
 	}
 
@@ -477,7 +477,7 @@ func TestGetSetlistTracks_NonOKStatusReturnsError(t *testing.T) {
 
 func TestGetSetlistTracks_403NotRegistered(t *testing.T) {
 	setlist := domain.Setlist{
-		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Artist: domain.Artist{Name: "Artist"},
 		Tracks: []domain.Track{{Name: "Song"}},
 	}
 
@@ -763,7 +763,7 @@ func TestCreatePlaylist_MalformedJSON(t *testing.T) {
 
 func TestGetSetlistTracks_401InvalidToken(t *testing.T) {
 	setlist := domain.Setlist{
-		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Artist: domain.Artist{Name: "Artist"},
 		Tracks: []domain.Track{{Name: "Song"}},
 	}
 
@@ -814,7 +814,7 @@ func TestSearchTrack_429RetriesAfterDelay(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Song", "spotify:track:uri1", "artist-id"}}))
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Song", "spotify:track:uri1", "Artist"}}))
 	}))
 	defer apiSrv.Close()
 
@@ -822,8 +822,8 @@ func TestSearchTrack_429RetriesAfterDelay(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 	a.sleepFn = func(d time.Duration) { sleptFor.Add(int64(d)) }
 
-	artist := domain.Artist{SpotifyID: "artist-id"}
-	uri, found, err := a.searchTrack(context.Background(), "token", domain.Track{Name: "Song"}, artist, false)
+	artist := domain.Artist{Name: "Artist"}
+	uri, found, err := a.searchTrack(context.Background(), "token", domain.Track{Name: "Song"}, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -853,7 +853,7 @@ func TestSearchTrack_429MissingRetryAfterDefaultsToOne(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Song", "spotify:track:uri1", "artist-id"}}))
+		json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Song", "spotify:track:uri1", "Artist"}}))
 	}))
 	defer apiSrv.Close()
 
@@ -861,7 +861,7 @@ func TestSearchTrack_429MissingRetryAfterDefaultsToOne(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 	a.sleepFn = func(d time.Duration) { sleptFor.Add(int64(d)) }
 
-	uri, found, err := a.searchTrack(context.Background(), "token", domain.Track{Name: "Song"}, domain.Artist{SpotifyID: "artist-id"}, false)
+	uri, found, err := a.searchTrack(context.Background(), "token", domain.Track{Name: "Song"}, domain.Artist{Name: "Artist"}, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -876,7 +876,7 @@ func TestSearchTrack_429MissingRetryAfterDefaultsToOne(t *testing.T) {
 
 func TestGetSetlistTracks_PreservesOrder(t *testing.T) {
 	setlist := domain.Setlist{
-		Artist: domain.Artist{SpotifyID: "artist-id"},
+		Artist: domain.Artist{Name: "Artist"},
 		Tracks: []domain.Track{{Name: "Alpha"}, {Name: "Beta"}, {Name: "Gamma"}},
 	}
 
@@ -885,13 +885,13 @@ func TestGetSetlistTracks_PreservesOrder(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(q, "Alpha"):
-			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Alpha", "spotify:track:alpha", "artist-id"}}))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Alpha", "spotify:track:alpha", "Artist"}}))
 		case strings.Contains(q, "Beta"):
 			// Simulate Beta being slower to verify ordering is index-based, not arrival-based.
 			time.Sleep(10 * time.Millisecond)
-			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Beta", "spotify:track:beta", "artist-id"}}))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Beta", "spotify:track:beta", "Artist"}}))
 		case strings.Contains(q, "Gamma"):
-			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Gamma", "spotify:track:gamma", "artist-id"}}))
+			json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{"Gamma", "spotify:track:gamma", "Artist"}}))
 		}
 	}))
 	defer apiSrv.Close()
@@ -927,7 +927,7 @@ func TestSearchTrack_MatchesDirectMatchOverVerboseNames(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Wasted Years"}
-	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	artist := domain.Artist{Name: "Iron Maiden"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -955,7 +955,7 @@ func TestSearchTrack_MatchesVerboseRemasterIfNoDirectMatch(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Wasted Years"}
-	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	artist := domain.Artist{Name: "Iron Maiden"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -982,7 +982,7 @@ func TestSearchTrack_MatchesVerboseLiveIfNoDirectMatchOrRemaster(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Wasted Years"}
-	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	artist := domain.Artist{Name: "Iron Maiden"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1008,7 +1008,7 @@ func TestSearchTrack_MatchesVerboseRemixIfNoDirectMatchRemasterOrLive(t *testing
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Wasted Years"}
-	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	artist := domain.Artist{Name: "Iron Maiden"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1032,7 +1032,7 @@ func TestSearchTrack_MatchesVerboseSomethingElseIfNoDirectMatchRemasterRemixOrLi
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Wasted Years"}
-	artist := domain.Artist{Name: "Iron Maiden", SpotifyID: "Iron Maiden"}
+	artist := domain.Artist{Name: "Iron Maiden"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1064,7 +1064,7 @@ func TestSearchTrack_CoverFallback_FindsOriginal(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
-	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	artist := domain.Artist{Name: "Hellripper"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1094,7 +1094,7 @@ func TestSearchTrack_CoverFallback_DisabledDoesNotRetry(t *testing.T) {
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
-	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	artist := domain.Artist{Name: "Hellripper"}
 	_, found, err := a.searchTrack(context.Background(), "token", track, artist, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1121,7 +1121,7 @@ func TestSearchTrack_CoverFallback_EmptyCoveredArtistDoesNotRetry(t *testing.T) 
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Some Song", CoveredArtistName: ""}
-	artist := domain.Artist{Name: "Artist", SpotifyID: "artist-id"}
+	artist := domain.Artist{Name: "Artist"}
 	_, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1158,7 +1158,7 @@ func TestSearchTrack_CoverFallback_MatchesDirectMatchOverVerboseNames(t *testing
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
-	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	artist := domain.Artist{Name: "Hellripper"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1183,7 +1183,7 @@ func TestSearchTrack_CoverFallback_MatchesVerboseRemasterIfNoDirectMatch(t *test
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
-	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	artist := domain.Artist{Name: "Hellripper"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1208,7 +1208,7 @@ func TestSearchTrack_CoverFallback_MatchesVerboseLiveIfNoDirectMatchOrRemaster(t
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
-	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	artist := domain.Artist{Name: "Hellripper"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1232,7 +1232,7 @@ func TestSearchTrack_CoverFallback_MatchesVerboseRemixIfNoDirectMatchRemasterOrL
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
-	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	artist := domain.Artist{Name: "Hellripper"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1255,7 +1255,7 @@ func TestSearchTrack_CoverFallback_MatchesVerboseSomethingElseIfNoDirectMatchRem
 	a.apiBaseURL = apiSrv.URL
 
 	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
-	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	artist := domain.Artist{Name: "Hellripper"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1297,7 +1297,7 @@ func TestSearchTrack_CoverFallback_429RetryPolicy(t *testing.T) {
 	a.sleepFn = func(d time.Duration) { sleptFor.Add(int64(d)) }
 
 	track := domain.Track{Name: "Whiplash", CoveredArtistName: "Metallica"}
-	artist := domain.Artist{Name: "Hellripper", SpotifyID: "hellripper-id"}
+	artist := domain.Artist{Name: "Hellripper"}
 	uri, found, err := a.searchTrack(context.Background(), "token", track, artist, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -51,7 +51,6 @@ func main() {
 	svc := service.NewService(
 		adapters.NewSetlistfmAdapter(apiKey),
 		spotifyAdapter,
-		adapters.NewMusicbrainzAdapter(),
 	)
 
 	playlistID, err := svc.SetlistToPlaylist(context.Background(), artistName, includeCovers, tourPlaylist)

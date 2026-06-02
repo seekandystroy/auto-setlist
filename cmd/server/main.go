@@ -34,7 +34,6 @@ func main() {
 	svc := service.NewService(
 		adapters.NewSetlistfmAdapter(apiKey),
 		spotifyAdapter,
-		adapters.NewMusicbrainzAdapter(),
 	)
 
 	mime.AddExtensionType(".js", "application/javascript")

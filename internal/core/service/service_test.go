@@ -32,12 +32,12 @@ func (m *mockSetlistfm) GetSetlistsForTour(_ context.Context, artist domain.Arti
 }
 
 type mockSpotify struct {
-	token                string
-	uris                 []string
-	playlistID           string
-	err                  error
-	receivedSetlist      domain.Setlist
-	receivedToken        string
+	token                 string
+	uris                  []string
+	playlistID            string
+	err                   error
+	receivedSetlist       domain.Setlist
+	receivedToken         string
 	receivedIncludeCovers bool
 }
 
@@ -57,28 +57,17 @@ func (m *mockSpotify) CreatePlaylist(_ context.Context, token string, _ domain.S
 	return m.playlistID, m.err
 }
 
-type mockMusicbrainz struct {
-	artist *domain.Artist
-	err    error
-}
-
-func (m *mockMusicbrainz) GetArtist(_ context.Context, mbid string) (*domain.Artist, error) {
-	return m.artist, m.err
-}
-
-func newSvc(setlistfm *mockSetlistfm, mb *mockMusicbrainz, spotify *mockSpotify) *service {
-	return NewService(setlistfm, spotify, mb)
+func newSvc(setlistfm *mockSetlistfm, spotify *mockSpotify) *service {
+	return NewService(setlistfm, spotify)
 }
 
 func TestGetArtistSetlists_HappyPath(t *testing.T) {
 	artist := domain.Artist{MBID: "abc", Name: "Sprout"}
-	enriched := domain.Artist{MBID: "abc", Name: "Sprout", SpotifyID: "spotify-123"}
-	setlists := []domain.Setlist{{Artist: enriched, Tracks: []domain.Track{{Name: "Song A"}, {Name: "Song B"}}}}
+	setlists := []domain.Setlist{{Artist: artist, Tracks: []domain.Track{{Name: "Song A"}, {Name: "Song B"}}}}
 	expectedURIs := []string{"spotify:track:uri1", "spotify:track:uri2"}
 
 	svc := newSvc(
 		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
-		&mockMusicbrainz{artist: &enriched},
 		&mockSpotify{uris: expectedURIs, playlistID: "playlist-abc"},
 	)
 
@@ -103,7 +92,6 @@ func TestGetArtistSetlists_SkipsEmptySetlists(t *testing.T) {
 
 	svc := newSvc(
 		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
-		&mockMusicbrainz{artist: &artist},
 		spotify,
 	)
 
@@ -120,7 +108,7 @@ func TestGetArtistSetlists_SkipsEmptySetlists(t *testing.T) {
 }
 
 func TestGetArtistSetlists_EmptyName(t *testing.T) {
-	svc := newSvc(&mockSetlistfm{}, &mockMusicbrainz{}, &mockSpotify{})
+	svc := newSvc(&mockSetlistfm{}, &mockSpotify{})
 
 	_, err := svc.SetlistToPlaylist(context.Background(), "", false, false)
 	if err == nil {
@@ -132,7 +120,7 @@ func TestGetArtistSetlists_EmptyName(t *testing.T) {
 }
 
 func TestGetArtistSetlists_NoArtistsFound(t *testing.T) {
-	svc := newSvc(&mockSetlistfm{result: []domain.Artist{}}, &mockMusicbrainz{}, &mockSpotify{})
+	svc := newSvc(&mockSetlistfm{result: []domain.Artist{}}, &mockSpotify{})
 
 	_, err := svc.SetlistToPlaylist(context.Background(), "Ghost", false, false)
 	if err == nil {
@@ -144,7 +132,6 @@ func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {
 	artist := domain.Artist{MBID: "abc", Name: "Sprout"}
 	svc := newSvc(
 		&mockSetlistfm{result: []domain.Artist{artist}, setlists: []domain.Setlist{}},
-		&mockMusicbrainz{artist: &artist},
 		&mockSpotify{},
 	)
 
@@ -156,25 +143,11 @@ func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {
 
 func TestGetArtistSetlists_SearchError(t *testing.T) {
 	underlying := errors.New("network failure")
-	svc := newSvc(&mockSetlistfm{searchErr: underlying}, &mockMusicbrainz{}, &mockSpotify{})
+	svc := newSvc(&mockSetlistfm{searchErr: underlying}, &mockSpotify{})
 
 	_, err := svc.SetlistToPlaylist(context.Background(), "Sprout", false, false)
 	if !errors.Is(err, underlying) {
 		t.Errorf("expected wrapped search error, got %v", err)
-	}
-}
-
-func TestGetArtistSetlists_MusicbrainzError(t *testing.T) {
-	underlying := errors.New("mbz down")
-	svc := newSvc(
-		&mockSetlistfm{result: []domain.Artist{{MBID: "abc", Name: "Sprout"}}},
-		&mockMusicbrainz{err: underlying},
-		&mockSpotify{},
-	)
-
-	_, err := svc.SetlistToPlaylist(context.Background(), "Sprout", false, false)
-	if !errors.Is(err, underlying) {
-		t.Errorf("expected wrapped musicbrainz error, got %v", err)
 	}
 }
 
@@ -183,7 +156,6 @@ func TestGetArtistSetlists_SetlistsError(t *testing.T) {
 	artist := domain.Artist{MBID: "abc", Name: "Sprout"}
 	svc := newSvc(
 		&mockSetlistfm{result: []domain.Artist{artist}, setlistsErr: underlying},
-		&mockMusicbrainz{artist: &artist},
 		&mockSpotify{},
 	)
 
@@ -199,7 +171,6 @@ func TestGetArtistSetlists_SpotifyError(t *testing.T) {
 	setlists := []domain.Setlist{{Artist: artist, Tracks: []domain.Track{{Name: "Song A"}}}}
 	svc := newSvc(
 		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
-		&mockMusicbrainz{artist: &artist},
 		&mockSpotify{err: underlying},
 	)
 
@@ -211,13 +182,11 @@ func TestGetArtistSetlists_SpotifyError(t *testing.T) {
 
 func TestSetlistToPlaylistAuthed_HappyPath(t *testing.T) {
 	artist := domain.Artist{MBID: "abc", Name: "Sprout"}
-	enriched := domain.Artist{MBID: "abc", Name: "Sprout", SpotifyID: "spotify-123"}
-	setlists := []domain.Setlist{{Artist: enriched, Tracks: []domain.Track{{Name: "Song A"}, {Name: "Song B"}}}}
+	setlists := []domain.Setlist{{Artist: artist, Tracks: []domain.Track{{Name: "Song A"}, {Name: "Song B"}}}}
 	spotify := &mockSpotify{uris: []string{"spotify:track:uri1"}, playlistID: "playlist-authed"}
 
 	svc := newSvc(
 		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
-		&mockMusicbrainz{artist: &enriched},
 		spotify,
 	)
 
@@ -234,7 +203,7 @@ func TestSetlistToPlaylistAuthed_HappyPath(t *testing.T) {
 }
 
 func TestSetlistToPlaylistAuthed_EmptyName(t *testing.T) {
-	svc := newSvc(&mockSetlistfm{}, &mockMusicbrainz{}, &mockSpotify{})
+	svc := newSvc(&mockSetlistfm{}, &mockSpotify{})
 
 	_, err := svc.SetlistToPlaylistAuthed(context.Background(), "", "tok", false, false)
 	if err == nil {
@@ -251,7 +220,6 @@ func TestSetlistToPlaylistAuthed_SpotifyOperationError(t *testing.T) {
 	setlists := []domain.Setlist{{Artist: artist, Tracks: []domain.Track{{Name: "Song A"}}}}
 	svc := newSvc(
 		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
-		&mockMusicbrainz{artist: &artist},
 		&mockSpotify{err: underlying},
 	)
 
@@ -268,7 +236,6 @@ func TestSetlistToPlaylistAuthed_PassesIncludeCoversToSpotify(t *testing.T) {
 
 	svc := newSvc(
 		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
-		&mockMusicbrainz{artist: &artist},
 		spotify,
 	)
 
@@ -299,7 +266,7 @@ func TestAllSongsFromLatestTour_MergesTracks(t *testing.T) {
 		tourSetlists: tourSetlists,
 	}
 
-	svc := newSvc(sfm, &mockMusicbrainz{artist: &artist}, spotify)
+	svc := newSvc(sfm, spotify)
 	_, err := svc.SetlistToPlaylistAuthed(context.Background(), "Sprout", "tok", false, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -337,7 +304,7 @@ func TestAllSongsFromLatestTour_FallsBackWhenNoTour(t *testing.T) {
 	}
 	spotify := &mockSpotify{uris: []string{"uri1"}, playlistID: "p1"}
 
-	svc := newSvc(sfm, &mockMusicbrainz{artist: &artist}, spotify)
+	svc := newSvc(sfm, spotify)
 	_, err := svc.SetlistToPlaylistAuthed(context.Background(), "Sprout", "tok", false, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -360,7 +327,7 @@ func TestAllSongsFromLatestTour_GetSetlistsForTourError(t *testing.T) {
 		tourSetlistsErr: underlying,
 	}
 
-	svc := newSvc(sfm, &mockMusicbrainz{artist: &artist}, &mockSpotify{})
+	svc := newSvc(sfm, &mockSpotify{})
 	_, err := svc.SetlistToPlaylistAuthed(context.Background(), "Sprout", "tok", false, true)
 	if !errors.Is(err, underlying) {
 		t.Errorf("expected wrapped tour fetch error, got %v", err)

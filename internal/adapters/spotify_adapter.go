@@ -42,7 +42,8 @@ type spotifyAdapter struct {
 }
 
 type spotifySearchArtist struct {
-	ID string `json:"id"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type spotifySearchTrack struct {
@@ -213,6 +214,7 @@ func (a *spotifyAdapter) CreatePlaylist(ctx context.Context, token string, setli
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
+	req.Close = true
 
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
@@ -255,6 +257,7 @@ func (a *spotifyAdapter) addTracksToPlaylist(token, playlistID string, uris []st
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
+	req.Close = true
 
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
@@ -275,6 +278,7 @@ func (a *spotifyAdapter) doSearchLoop(ctx context.Context, token string, params 
 			return spotifySearchResponse{}, fmt.Errorf("spotify: building search request: %w", err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Close = true
 
 		resp, err := a.httpClient.Do(req)
 		if err != nil {
@@ -326,7 +330,7 @@ func (a *spotifyAdapter) searchTrack(ctx context.Context, token string, track do
 		return "", false, err
 	}
 
-	uri, found, err := a.trackURIFromResponse(track.Name, &result, true, artist.SpotifyID)
+	uri, found, err := a.trackURIFromResponse(track.Name, &result, true, artist.Name)
 	if found {
 		return uri, found, err
 	}
@@ -348,7 +352,7 @@ func (a *spotifyAdapter) searchTrack(ctx context.Context, token string, track do
 	return a.trackURIFromResponse(track.Name, &coverResult, false, "")
 }
 
-func (a *spotifyAdapter) trackURIFromResponse(trackName string, resp *spotifySearchResponse, checkArtistID bool, artistID string) (string, bool, error) {
+func (a *spotifyAdapter) trackURIFromResponse(trackName string, resp *spotifySearchResponse, checkArtistName bool, artistName string) (string, bool, error) {
 	remasterIdx := -1
 	remixIdx := -1
 	liveIdx := -1
@@ -358,7 +362,7 @@ func (a *spotifyAdapter) trackURIFromResponse(trackName string, resp *spotifySea
 		if !found {
 			continue
 		}
-		if !checkArtistID || (checkArtistID && slices.ContainsFunc(item.Artists, func(artist spotifySearchArtist) bool { return artist.ID == artistID })) {
+		if !checkArtistName || (checkArtistName && slices.ContainsFunc(item.Artists, func(artist spotifySearchArtist) bool { return artist.Name == artistName })) {
 			if after == "" {
 				return item.URI, true, nil
 			} else {
@@ -427,6 +431,7 @@ func (a *spotifyAdapter) postToken(body url.Values, existingRefreshToken string)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString(
 		[]byte(a.clientID+":"+a.clientSecret),
 	))
+	req.Close = true
 
 	resp, err := a.httpClient.Do(req)
 	if err != nil {

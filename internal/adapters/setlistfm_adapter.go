@@ -89,6 +89,7 @@ func (c *setlistfmAdapter) SearchArtists(ctx context.Context, artistName string)
 	}
 	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("Accept", "application/json")
+	req.Close = true
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -132,6 +133,7 @@ func (c *setlistfmAdapter) GetSetlists(ctx context.Context, artist domain.Artist
 		}
 		req.Header.Set("x-api-key", c.apiKey)
 		req.Header.Set("Accept", "application/json")
+		req.Close = true
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
@@ -205,6 +207,7 @@ func (c *setlistfmAdapter) GetSetlistsForTour(ctx context.Context, artist domain
 		}
 		req.Header.Set("x-api-key", c.apiKey)
 		req.Header.Set("Accept", "application/json")
+		req.Close = true
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {

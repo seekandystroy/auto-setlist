@@ -9,13 +9,12 @@ import (
 )
 
 type service struct {
-	setlistfm   ports.Setlistfm
-	spotify     ports.Spotify
-	musicbrainz ports.Musicbrainz
+	setlistfm ports.Setlistfm
+	spotify   ports.Spotify
 }
 
-func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify, musicbrainz ports.Musicbrainz) *service {
-	return &service{setlistfm: setlistfm, spotify: spotify, musicbrainz: musicbrainz}
+func NewService(setlistfm ports.Setlistfm, spotify ports.Spotify) *service {
+	return &service{setlistfm: setlistfm, spotify: spotify}
 }
 
 func (s *service) SetlistToPlaylist(ctx context.Context, artistName string, includeCovers, tourPlaylist bool) (string, error) {
@@ -40,9 +39,6 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token
 	}
 
 	artist := artists[0]
-	if err := s.fillSpotifyID(ctx, &artist); err != nil {
-		return "", err
-	}
 
 	setlists, err := s.getSetlists(ctx, artist)
 	if err != nil {
@@ -122,15 +118,6 @@ func (s *service) searchArtists(ctx context.Context, artistName string) ([]domai
 		return nil, fmt.Errorf("searching for artist %q: %w", artistName, err)
 	}
 	return result, nil
-}
-
-func (s *service) fillSpotifyID(ctx context.Context, artist *domain.Artist) error {
-	result, err := s.musicbrainz.GetArtist(ctx, artist.MBID)
-	if err != nil {
-		return fmt.Errorf("fetching artist from MusicBrainz: %w", err)
-	}
-	artist.SpotifyID = result.SpotifyID
-	return nil
 }
 
 func (s *service) getSetlists(ctx context.Context, artist domain.Artist) ([]domain.Setlist, error) {
