@@ -188,11 +188,11 @@ func (a *spotifyAdapter) GetSetlistTracks(ctx context.Context, token string, set
 	return uris, nil
 }
 
-func (a *spotifyAdapter) CreatePlaylist(ctx context.Context, token string, setlist domain.Setlist, uris []string) (string, error) {
+func (a *spotifyAdapter) CreatePlaylist(ctx context.Context, token string, setlist domain.Setlist, uris []string, tourPlaylist bool) (string, error) {
 	applog.LoggerFromCtx(ctx).Info("Creating playlist on Spotify", "artist", setlist.Artist.Name)
 
 	var playlistName string
-	if setlist.Tour != "" {
+	if tourPlaylist && setlist.Tour != "" {
 		playlistName = fmt.Sprintf("%s - %s setlist by auto-setlist", setlist.Artist.Name, setlist.Tour)
 	} else {
 		playlistName = fmt.Sprintf("%s setlist by auto-setlist", setlist.Artist.Name)

@@ -81,7 +81,7 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token
 		return "", err
 	}
 
-	playlistID, err := s.spotify.CreatePlaylist(ctx, token, *setlist, uris)
+	playlistID, err := s.spotify.CreatePlaylist(ctx, token, *setlist, uris, tourPlaylist)
 	if err != nil {
 		return "", err
 	}

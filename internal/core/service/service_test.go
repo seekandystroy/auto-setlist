@@ -52,7 +52,7 @@ func (m *mockSpotify) GetSetlistTracks(_ context.Context, token string, s domain
 	return m.uris, m.err
 }
 
-func (m *mockSpotify) CreatePlaylist(_ context.Context, token string, _ domain.Setlist, _ []string) (string, error) {
+func (m *mockSpotify) CreatePlaylist(_ context.Context, token string, _ domain.Setlist, _ []string, _ bool) (string, error) {
 	m.receivedToken = token
 	return m.playlistID, m.err
 }
