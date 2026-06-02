@@ -15,9 +15,17 @@
       <h1 class="title">auto-setlist</h1>
       <p class="subtitle">Spotify playlists from live setlists.</p>
 
-      <button id="connect" class="button is-rounded is-success is-medium" style="display:none">
-        Connect to Spotify
-      </button>
+      <div id="connect" style="display:none">
+        <button id="connect-button" class="button is-rounded is-success is-medium">
+          <span class="icon"><i class="fab fa-spotify"></i></span>
+          <span>
+            Connect to Spotify
+          </span>
+        </button>
+        <div class="mt-4">
+          <p>(auto-setlist does not store any personal information)</p>
+        </div>
+      </div>
 
       <div id="main" style="display:none">
         <div class="field has-addons">

@@ -97,7 +97,8 @@ async function getAccessToken(code) {
 
 // --- UI ---
 
-const connectBtn = document.getElementById('connect');
+const connectDiv = document.getElementById('connect');
+const connectBtn = document.getElementById('connect-button');
 const mainDiv = document.getElementById('main');
 const input = document.getElementById('artist');
 const submitBtn = document.getElementById('submit');
@@ -119,12 +120,12 @@ modeLatestBtn.addEventListener('click', () => { setMode(false); onInputChange();
 modeTourBtn.addEventListener('click', () => { setMode(true); onInputChange(); });
 
 function showMain() {
-  connectBtn.style.display = 'none';
+  connectDiv.style.display = 'none';
   mainDiv.style.display = '';
 }
 
 function showConnect() {
-  connectBtn.style.display = '';
+  connectDiv.style.display = '';
   mainDiv.style.display = 'none';
 }
 
