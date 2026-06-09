@@ -357,12 +357,14 @@ func (a *spotifyAdapter) trackURIFromResponse(trackName string, resp *spotifySea
 	remixIdx := -1
 	liveIdx := -1
 	demoIdx := -1
+	lcArtistName := strings.ToLower(artistName)
+
 	for i, item := range resp.Tracks.Items {
 		after, found := strings.CutPrefix(item.Name, trackName)
 		if !found {
 			continue
 		}
-		if !checkArtistName || (checkArtistName && slices.ContainsFunc(item.Artists, func(artist spotifySearchArtist) bool { return artist.Name == artistName })) {
+		if !checkArtistName || (checkArtistName && slices.ContainsFunc(item.Artists, func(artist spotifySearchArtist) bool { return strings.ToLower(artist.Name) == lcArtistName })) {
 			if after == "" {
 				return item.URI, true, nil
 			} else {
