@@ -1268,6 +1268,44 @@ func TestSearchTrack_CoverFallback_MatchesVerboseSomethingElseIfNoDirectMatchRem
 	}
 }
 
+func TestSearchTrack_TrackNameMatchIsCaseInsensitive(t *testing.T) {
+	tests := []struct {
+		name          string
+		responseTrack string // track name returned by Spotify
+		queryTrack    string // track name in the domain setlist
+		wantFound     bool
+	}{
+		{"exact match", "Wasted Years", "Wasted Years", true},
+		{"response lowercase", "wasted years", "Wasted Years", true},
+		{"query lowercase", "Wasted Years", "wasted years", true},
+		{"both uppercase", "WASTED YEARS", "Wasted Years", true},
+		{"different track", "Run to the Hills", "Wasted Years", false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(makeSearchResponse([][3]string{{tc.responseTrack, "spotify:track:uri1", "Iron Maiden"}}))
+			}))
+			defer apiSrv.Close()
+
+			a := newTestAccountsAdapter(t, "")
+			a.apiBaseURL = apiSrv.URL
+
+			track := domain.Track{Name: tc.queryTrack}
+			artist := domain.Artist{Name: "Iron Maiden"}
+			_, found, err := a.searchTrack(context.Background(), "token", track, artist, false)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if found != tc.wantFound {
+				t.Errorf("found=%v, want %v", found, tc.wantFound)
+			}
+		})
+	}
+}
+
 func TestSearchTrack_ArtistNameMatchIsCaseInsensitive(t *testing.T) {
 	tests := []struct {
 		name             string

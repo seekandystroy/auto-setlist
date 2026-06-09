@@ -358,9 +358,10 @@ func (a *spotifyAdapter) trackURIFromResponse(trackName string, resp *spotifySea
 	liveIdx := -1
 	demoIdx := -1
 	lcArtistName := strings.ToLower(artistName)
+	lcTrackName := strings.ToLower(trackName)
 
 	for i, item := range resp.Tracks.Items {
-		after, found := strings.CutPrefix(item.Name, trackName)
+		after, found := strings.CutPrefix(strings.ToLower(item.Name), lcTrackName)
 		if !found {
 			continue
 		}
