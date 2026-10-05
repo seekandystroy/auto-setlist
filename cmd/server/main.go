@@ -25,14 +25,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	spotifyAdapter, err := adapters.NewSpotifyAdapter(clientID, clientSecret, adapters.NewSpotifyCallbackAdapter())
+	// Optional API roots, for pointing the app at fakes (see acceptance/); default to the real APIs.
+	var setlistfmOpts []adapters.SetlistfmOption
+	if baseURL := os.Getenv("SETLISTFM_BASE_URL"); baseURL != "" {
+		setlistfmOpts = append(setlistfmOpts, adapters.WithSetlistfmBaseURL(baseURL))
+	}
+	var spotifyOpts []adapters.SpotifyOption
+	if baseURL := os.Getenv("SPOTIFY_API_BASE_URL"); baseURL != "" {
+		spotifyOpts = append(spotifyOpts, adapters.WithSpotifyAPIBaseURL(baseURL))
+	}
+
+	spotifyAdapter, err := adapters.NewSpotifyAdapter(clientID, clientSecret, adapters.NewSpotifyCallbackAdapter(), spotifyOpts...)
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
 
 	svc := service.NewService(
-		adapters.NewSetlistfmAdapter(apiKey),
+		adapters.NewSetlistfmAdapter(apiKey, setlistfmOpts...),
 		spotifyAdapter,
 	)
 

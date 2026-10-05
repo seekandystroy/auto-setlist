@@ -37,3 +37,8 @@ go.work.sum
 
 # Spotify token while this is run locally
 spotify_token.json
+
+# Acceptance tests (Playwright)
+acceptance/node_modules/
+acceptance/test-results/
+acceptance/playwright-report/

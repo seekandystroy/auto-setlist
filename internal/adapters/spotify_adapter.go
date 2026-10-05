@@ -104,7 +104,16 @@ type spotifyErrorResponse struct {
 	} `json:"error"`
 }
 
-func NewSpotifyAdapter(clientID, clientSecret string, callbackReceiver ports.SpotifyCallbackReceiver) (*spotifyAdapter, error) {
+// SpotifyOption configures optional settings on the Spotify adapter.
+type SpotifyOption func(*spotifyAdapter)
+
+// WithSpotifyAPIBaseURL points the adapter at a different Spotify Web API root,
+// e.g. a fake server in acceptance tests.
+func WithSpotifyAPIBaseURL(baseURL string) SpotifyOption {
+	return func(a *spotifyAdapter) { a.apiBaseURL = baseURL }
+}
+
+func NewSpotifyAdapter(clientID, clientSecret string, callbackReceiver ports.SpotifyCallbackReceiver, opts ...SpotifyOption) (*spotifyAdapter, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("spotify: resolving working dir: %w", err)
@@ -121,6 +130,9 @@ func NewSpotifyAdapter(clientID, clientSecret string, callbackReceiver ports.Spo
 	}
 	a.openBrowserFn = defaultOpenBrowser
 	a.sleepFn = time.Sleep
+	for _, opt := range opts {
+		opt(a)
+	}
 	return a, nil
 }
 

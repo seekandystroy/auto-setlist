@@ -1388,3 +1388,25 @@ func TestSearchTrack_CoverFallback_429RetryPolicy(t *testing.T) {
 		t.Errorf("expected sleep of 2s for cover fallback 429, got %v", time.Duration(sleptFor.Load()))
 	}
 }
+
+func TestNewSpotifyAdapter_WithAPIBaseURL(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(spotifySearchResponse{})
+	}))
+	defer srv.Close()
+
+	adapter, err := NewSpotifyAdapter("id", "secret", &mockCallbackReceiver{}, WithSpotifyAPIBaseURL(srv.URL+"/v1"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	setlist := domain.Setlist{Artist: domain.Artist{Name: "Sprout"}, Tracks: []domain.Track{{Name: "Song"}}}
+	if _, err := adapter.GetSetlistTracks(context.Background(), "token", setlist, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/v1/search" {
+		t.Errorf("expected request to /v1/search, got %q", gotPath)
+	}
+}

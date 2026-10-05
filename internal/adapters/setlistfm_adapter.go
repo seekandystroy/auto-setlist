@@ -65,13 +65,26 @@ type setlistfmSetlistsResponse struct {
 	Setlists []setlistfmSetlist `json:"setlist"`
 }
 
-func NewSetlistfmAdapter(apiKey string) *setlistfmAdapter {
-	return &setlistfmAdapter{
+// SetlistfmOption configures optional settings on the Setlist.fm adapter.
+type SetlistfmOption func(*setlistfmAdapter)
+
+// WithSetlistfmBaseURL points the adapter at a different Setlist.fm API root,
+// e.g. a fake server in acceptance tests.
+func WithSetlistfmBaseURL(baseURL string) SetlistfmOption {
+	return func(c *setlistfmAdapter) { c.baseURL = baseURL }
+}
+
+func NewSetlistfmAdapter(apiKey string, opts ...SetlistfmOption) *setlistfmAdapter {
+	c := &setlistfmAdapter{
 		apiKey:     apiKey,
 		httpClient: &http.Client{},
 		baseURL:    "https://api.setlist.fm/rest/1.0",
 		sleepFn:    time.Sleep,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 func (c *setlistfmAdapter) SearchArtists(ctx context.Context, artistName string) ([]domain.Artist, error) {

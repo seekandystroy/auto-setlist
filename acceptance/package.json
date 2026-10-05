@@ -1,0 +1,12 @@
+{
+  "name": "auto-setlist-acceptance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

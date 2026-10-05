@@ -553,3 +553,21 @@ func TestSearchArtists_SendsCorrectHeaders(t *testing.T) {
 		t.Errorf("expected Accept %q, got %q", "application/json", gotAccept)
 	}
 }
+
+func TestNewSetlistfmAdapter_WithBaseURL(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(setlistfmSearchResult{})
+	}))
+	defer srv.Close()
+
+	adapter := NewSetlistfmAdapter("test-key", WithSetlistfmBaseURL(srv.URL+"/rest/1.0"))
+	if _, err := adapter.SearchArtists(context.Background(), "Sprout"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/rest/1.0/search/artists" {
+		t.Errorf("expected request to /rest/1.0/search/artists, got %q", gotPath)
+	}
+}
