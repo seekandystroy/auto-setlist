@@ -24,11 +24,11 @@ auto-setlist creates playlists in the visitor's own Spotify account, so before a
 - **When** they click "Connect to Spotify" and cancel on Spotify's authorization page
 - **Then** they are back on auto-setlist and see the "Connect to Spotify" button again
 
-### A failed authorization asks the visitor to connect again
+### A failed authorization tells the visitor why and asks them to connect again
 
 - **Given** a visitor coming back from Spotify with an authorization code that Spotify rejects (for example, one that was already used)
 - **When** the page loads
-- **Then** they see the "Connect to Spotify" button
+- **Then** they see the error `Spotify auth error: <Spotify's reason>` next to the "Connect to Spotify" button
 
 ### A returning visitor goes straight to the artist form
 

@@ -39,11 +39,12 @@ test.describe('Connecting to Spotify', () => {
     await expect(page.getByRole('button', { name: 'Connect to Spotify' })).toBeVisible();
   });
 
-  test('A failed authorization asks the visitor to connect again', async ({ page, world }) => {
+  test('A failed authorization tells the visitor why and asks them to connect again', async ({ page, world }) => {
     await world.load({ ...hellripper, spotify: { users: [{ id: 'visitor' }], catalog } });
 
     await page.goto('/?code=already-used-code');
 
+    await expect(page.getByText('Spotify auth error: Invalid authorization code', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Connect to Spotify' })).toBeVisible();
     await expect(page.getByPlaceholder('Artist name')).toBeHidden();
   });

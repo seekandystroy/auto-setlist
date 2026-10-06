@@ -99,6 +99,7 @@ async function getAccessToken(code) {
 
 const connectDiv = document.getElementById('connect');
 const connectBtn = document.getElementById('connect-button');
+const connectError = document.getElementById('connect-error');
 const mainDiv = document.getElementById('main');
 const input = document.getElementById('artist');
 const submitBtn = document.getElementById('submit');
@@ -137,7 +138,10 @@ async function init() {
     try {
       await getAccessToken(code);
     } catch (err) {
-      result.innerHTML = `<div class="notification is-danger">Spotify auth error: ${err.message}</div>`;
+      const notification = document.createElement('div');
+      notification.className = 'notification is-danger';
+      notification.textContent = `Spotify auth error: ${err.message}`;
+      connectError.replaceChildren(notification);
     }
   }
 
