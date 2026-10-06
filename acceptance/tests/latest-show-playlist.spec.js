@@ -128,16 +128,16 @@ test.describe('Playlist from the latest show', () => {
     expect(await world.playlists()).toEqual([]);
   });
 
-  test('A show with none of its songs on Spotify creates an empty playlist', async ({ page, world }) => {
+  test('A show with none of its songs on Spotify shows an error', async ({ page, world }) => {
     await world.load(hellripperWith([{ sets: [['Unreleased Song', 'Another Unreleased Song']] }]));
     await page.goto('/');
 
     await createPlaylist(page, 'Hellripper');
 
-    await expect(page.getByRole('link', { name: 'Listen on Spotify' })).toBeVisible();
-    const [playlist] = await world.playlists();
-    expect(playlist.name).toBe('Hellripper setlist by auto-setlist');
-    expect(playlist.tracks).toEqual([]);
+    await expect(
+      page.getByText('songs from setlistfm for "Hellripper" not found on Spotify', { exact: true }),
+    ).toBeVisible();
+    expect(await world.playlists()).toEqual([]);
   });
 
   test('The button is disabled until an artist is typed', async ({ page, world }) => {

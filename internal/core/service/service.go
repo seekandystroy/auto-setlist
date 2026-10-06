@@ -77,6 +77,9 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token
 	if err != nil {
 		return "", err
 	}
+	if len(uris) == 0 {
+		return "", fmt.Errorf("songs from setlistfm for %q not found on Spotify", artistName)
+	}
 
 	playlistID, err := s.spotify.CreatePlaylist(ctx, token, *setlist, uris, tourPlaylist)
 	if err != nil {
