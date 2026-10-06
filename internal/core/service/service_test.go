@@ -142,6 +142,9 @@ func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty setlists, got nil")
 	}
+	if err.Error() != `no setlists found for "Sprout"` {
+		t.Errorf("unexpected error message: %q", err.Error())
+	}
 }
 
 func TestGetArtistSetlists_SearchError(t *testing.T) {

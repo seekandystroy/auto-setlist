@@ -114,10 +114,7 @@ test.describe('Playlist from the latest show', () => {
 
     await createPlaylist(page, 'Hellripper');
 
-    // The app retries Setlist.fm's 404 with backoff before giving up.
-    await expect(
-      page.getByText('fetching setlists for "Hellripper": setlistfm: unexpected status 404', { exact: true }),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('no setlists found for "Hellripper"', { exact: true })).toBeVisible();
     expect(await world.playlists()).toEqual([]);
   });
 

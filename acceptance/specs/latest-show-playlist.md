@@ -49,7 +49,7 @@ The artist used is Setlist.fm's best match for the typed name, and the playlist 
 
 - **Given** an artist Setlist.fm knows but has no setlists for
 - **When** a connected visitor creates a playlist for that artist
-- **Then** after several seconds they see the error `fetching setlists for "<artist>": setlistfm: unexpected status 404`
+- **Then** they see the error `no setlists found for "<artist>"` right away
 - **And** no playlist is created
 
 ### An artist whose shows all lack songs shows an error
