@@ -104,9 +104,7 @@ test.describe('Playlist from the latest show', () => {
 
     await createPlaylist(page, 'Nonexistent Band');
 
-    await expect(
-      page.getByText('searching for artist "Nonexistent Band": setlistfm: unexpected status 404', { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText('Artist not found', { exact: true })).toBeVisible();
     expect(await world.playlists()).toEqual([]);
   });
 

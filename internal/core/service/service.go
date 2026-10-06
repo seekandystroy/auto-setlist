@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/seekandystroy/auto-setlist/internal/core/domain"
@@ -35,7 +36,7 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token
 		return "", err
 	}
 	if len(artists) == 0 {
-		return "", fmt.Errorf("no artist found for %q", artistName)
+		return "", errors.New("Artist not found")
 	}
 
 	artist := artists[0]

@@ -110,6 +110,10 @@ func (c *setlistfmAdapter) SearchArtists(ctx context.Context, artistName string)
 	}
 	defer resp.Body.Close()
 
+	// Setlist.fm answers a search with no matches with 404.
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("setlistfm: unexpected status %d", resp.StatusCode)
 	}

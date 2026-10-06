@@ -51,8 +51,25 @@ func TestSearchArtists_HappyPath(t *testing.T) {
 	}
 }
 
+// Setlist.fm answers a search with no matches with 404.
+func TestSearchArtists_NotFoundMeansNoArtists(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.SearchArtists(context.Background(), "Nonexistent Band")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected no artists, got %+v", result)
+	}
+}
+
 func TestSearchArtists_NonOKStatus(t *testing.T) {
-	for _, status := range []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusInternalServerError} {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
 		status := status
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

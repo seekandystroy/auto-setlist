@@ -126,6 +126,9 @@ func TestGetArtistSetlists_NoArtistsFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty results, got nil")
 	}
+	if err.Error() != "Artist not found" {
+		t.Errorf("unexpected error message: %q", err.Error())
+	}
 }
 
 func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {

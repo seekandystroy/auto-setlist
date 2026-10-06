@@ -42,7 +42,7 @@ The artist used is Setlist.fm's best match for the typed name, and the playlist 
 
 - **Given** no artist on Setlist.fm matches "Nonexistent Band"
 - **When** a connected visitor types "Nonexistent Band" and clicks "Create Playlist"
-- **Then** they see the error `searching for artist "Nonexistent Band": setlistfm: unexpected status 404`
+- **Then** they see the error `Artist not found`
 - **And** no playlist is created
 
 ### An artist with no setlists shows an error
