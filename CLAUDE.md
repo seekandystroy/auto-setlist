@@ -84,6 +84,6 @@ Rules for specs:
 
 - Errors are wrapped with context (`fmt.Errorf("fetching setlists for %q: %w", …)`). Today the web UI shows the error text to users as-is, so wording changes in errors are user-visible and acceptance tests pin them.
 - "Nothing found" is not a failure. Setlist.fm answers empty searches and artists without setlists with 404, so the adapter returns empty results for a 404 (and doesn't retry it). The service turns empty results into the user-facing errors (`Artist not found`, `no setlists found for "…"`, `songs from setlistfm for "…" not found on Spotify`) and never creates an empty playlist.
-- In `static/`, put messages in the page with `textContent`, not `innerHTML`: error texts can contain what the user typed.
+- In `static/`, never use `innerHTML`: error texts can contain what the user typed. Build content with the `el()` helper in `app.js` (strings become text) or `textContent`.
 - Log through `applog.LoggerFromCtx(ctx)` so request IDs follow the request.
 - Commit messages use Conventional Commits (`feat:`, `fix:`, `chore:`, `feat(webapp):`, …).

@@ -45,5 +45,4 @@ I have a build deployed [here](https://auto-setlist.onrender.com/), but Spotify 
 
 ## Future improvements
 Behavior the acceptance specs (`acceptance/specs/`) currently pin as-is, but that would be better for users:
-1. **Failed authorization leaves the code in the address bar.** When the token exchange fails, `?code=…` stays in the URL, so reloading the page tries the same rejected code again and shows the error again. Clear it on failure too. (`connect-spotify.md`)
-2. **Error messages are rendered as HTML.** `static/app.js` puts the API's error text in the page with `innerHTML`, and those errors include the typed artist name, so markup typed into the field gets rendered (only on the visitor's own page). Use `textContent`. (`latest-show-playlist.md`)
+None right now.
