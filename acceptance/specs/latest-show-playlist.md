@@ -42,14 +42,14 @@ The artist used is Setlist.fm's best match for the typed name, and the playlist 
 
 - **Given** no artist on Setlist.fm matches "Nonexistent Band"
 - **When** a connected visitor types "Nonexistent Band" and clicks "Create Playlist"
-- **Then** they see the error `searching for artist "Nonexistent Band": setlistfm: unexpected status 404`
+- **Then** they see the error `Artist not found`
 - **And** no playlist is created
 
 ### An artist with no setlists shows an error
 
 - **Given** an artist Setlist.fm knows but has no setlists for
 - **When** a connected visitor creates a playlist for that artist
-- **Then** after several seconds they see the error `fetching setlists for "<artist>": setlistfm: unexpected status 404`
+- **Then** they see the error `no setlists found for "<artist>"` right away
 - **And** no playlist is created
 
 ### An artist whose shows all lack songs shows an error
@@ -59,12 +59,18 @@ The artist used is Setlist.fm's best match for the typed name, and the playlist 
 - **Then** they see the error `no non-empty setlists found for "<artist>"`
 - **And** no playlist is created
 
-### A show with none of its songs on Spotify creates an empty playlist
+### A show with none of its songs on Spotify shows an error
 
 - **Given** an artist whose latest show only has songs Spotify doesn't have
 - **When** a connected visitor creates a playlist for that artist
-- **Then** they get a "Listen on Spotify" link
-- **And** their Spotify account has an empty playlist named "<artist> setlist by auto-setlist"
+- **Then** they see the error `songs from setlistfm for "<artist>" not found on Spotify`
+- **And** no playlist is created
+
+### Errors show the artist's name exactly as typed
+
+- **Given** an artist Setlist.fm knows as "<b>Hellripper</b>" but has no setlists for
+- **When** a connected visitor types "<b>Hellripper</b>" and clicks "Create Playlist"
+- **Then** they see the error `no setlists found for "<b>Hellripper</b>"`, with the tags shown as text rather than turning the name bold
 
 ### The button is disabled until an artist is typed
 

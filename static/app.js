@@ -91,14 +91,23 @@ async function getAccessToken(code) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error_description || 'Token exchange failed');
   saveToken(data);
-  // Remove code from URL without adding a history entry
-  window.history.replaceState({}, '', window.location.pathname);
 }
 
 // --- UI ---
 
+// Builds an element. Strings in `children` become text, never HTML: messages can contain what the user typed.
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  Object.assign(node, props);
+  node.append(...children);
+  return node;
+}
+
+const errorNotification = (message) => el('div', { className: 'notification is-danger' }, message);
+
 const connectDiv = document.getElementById('connect');
 const connectBtn = document.getElementById('connect-button');
+const connectError = document.getElementById('connect-error');
 const mainDiv = document.getElementById('main');
 const input = document.getElementById('artist');
 const submitBtn = document.getElementById('submit');
@@ -137,8 +146,10 @@ async function init() {
     try {
       await getAccessToken(code);
     } catch (err) {
-      result.innerHTML = `<div class="notification is-danger">Spotify auth error: ${err.message}</div>`;
+      connectError.replaceChildren(errorNotification(`Spotify auth error: ${err.message}`));
     }
+    // The code is single-use: drop it from the URL whether or not it worked, without adding a history entry
+    window.history.replaceState({}, '', window.location.pathname);
   }
 
   const token = await getValidToken().catch(() => null);
@@ -160,7 +171,7 @@ function onInputChange() {
   if (requestCompleted) {
     requestCompleted = false;
     submitBtn.textContent = 'Create Playlist';
-    result.innerHTML = '';
+    result.replaceChildren();
   }
   submitBtn.disabled = input.value.trim() === '';
 }
@@ -172,7 +183,7 @@ input.addEventListener('keydown', (e) => {
 });
 
 submitBtn.addEventListener('click', async () => {
-  result.innerHTML = '';
+  result.replaceChildren();
   submitBtn.disabled = true;
   submitBtn.classList.add('is-loading');
   try {
@@ -197,16 +208,23 @@ submitBtn.addEventListener('click', async () => {
     const data = await resp.json();
     if (!resp.ok) {
       requestCompleted = true;
-      result.innerHTML = `<div class="notification is-danger">${data.error || resp.statusText}</div>`;
+      result.replaceChildren(errorNotification(data.error || resp.statusText));
     } else {
       requestCompleted = true;
       submitBtn.textContent = 'Created!';
       submitBtn.disabled = true;
-      result.innerHTML = `<a href="${data.playlist_url}" class="button is-success is-medium is-rounded" target="_blank"><span class="icon"><i class="fab fa-spotify"></i></span><span>Listen on Spotify</span></a>`;
+      result.replaceChildren(
+        el(
+          'a',
+          { href: data.playlist_url, className: 'button is-success is-medium is-rounded', target: '_blank' },
+          el('span', { className: 'icon' }, el('i', { className: 'fab fa-spotify' })),
+          el('span', {}, 'Listen on Spotify'),
+        ),
+      );
     }
   } catch (err) {
     requestCompleted = true;
-    result.innerHTML = `<div class="notification is-danger">${err.message}</div>`;
+    result.replaceChildren(errorNotification(err.message));
   } finally {
     submitBtn.classList.remove('is-loading');
     if (submitBtn.textContent !== 'Created!') submitBtn.disabled = input.value.trim() === '';

@@ -104,9 +104,7 @@ test.describe('Playlist from the latest show', () => {
 
     await createPlaylist(page, 'Nonexistent Band');
 
-    await expect(
-      page.getByText('searching for artist "Nonexistent Band": setlistfm: unexpected status 404', { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText('Artist not found', { exact: true })).toBeVisible();
     expect(await world.playlists()).toEqual([]);
   });
 
@@ -116,10 +114,7 @@ test.describe('Playlist from the latest show', () => {
 
     await createPlaylist(page, 'Hellripper');
 
-    // The app retries Setlist.fm's 404 with backoff before giving up.
-    await expect(
-      page.getByText('fetching setlists for "Hellripper": setlistfm: unexpected status 404', { exact: true }),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('no setlists found for "Hellripper"', { exact: true })).toBeVisible();
     expect(await world.playlists()).toEqual([]);
   });
 
@@ -133,16 +128,28 @@ test.describe('Playlist from the latest show', () => {
     expect(await world.playlists()).toEqual([]);
   });
 
-  test('A show with none of its songs on Spotify creates an empty playlist', async ({ page, world }) => {
+  test('A show with none of its songs on Spotify shows an error', async ({ page, world }) => {
     await world.load(hellripperWith([{ sets: [['Unreleased Song', 'Another Unreleased Song']] }]));
     await page.goto('/');
 
     await createPlaylist(page, 'Hellripper');
 
-    await expect(page.getByRole('link', { name: 'Listen on Spotify' })).toBeVisible();
-    const [playlist] = await world.playlists();
-    expect(playlist.name).toBe('Hellripper setlist by auto-setlist');
-    expect(playlist.tracks).toEqual([]);
+    await expect(
+      page.getByText('songs from setlistfm for "Hellripper" not found on Spotify', { exact: true }),
+    ).toBeVisible();
+    expect(await world.playlists()).toEqual([]);
+  });
+
+  test("Errors show the artist's name exactly as typed", async ({ page, world }) => {
+    await world.load({
+      setlistfm: { artists: [{ name: '<b>Hellripper</b>', setlists: [] }] },
+      spotify: { users: [visitor], catalog: hellripperCatalog },
+    });
+    await page.goto('/');
+
+    await createPlaylist(page, '<b>Hellripper</b>');
+
+    await expect(page.getByText('no setlists found for "<b>Hellripper</b>"', { exact: true })).toBeVisible();
   });
 
   test('The button is disabled until an artist is typed', async ({ page, world }) => {

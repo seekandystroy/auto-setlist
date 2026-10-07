@@ -39,6 +39,7 @@ type mockSpotify struct {
 	receivedSetlist       domain.Setlist
 	receivedToken         string
 	receivedIncludeCovers bool
+	createPlaylistCalled  bool
 }
 
 func (m *mockSpotify) GetValidToken() (string, error) {
@@ -54,6 +55,7 @@ func (m *mockSpotify) GetSetlistTracks(_ context.Context, token string, s domain
 
 func (m *mockSpotify) CreatePlaylist(_ context.Context, token string, _ domain.Setlist, _ []string, _ bool) (string, error) {
 	m.receivedToken = token
+	m.createPlaylistCalled = true
 	return m.playlistID, m.err
 }
 
@@ -126,6 +128,9 @@ func TestGetArtistSetlists_NoArtistsFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty results, got nil")
 	}
+	if err.Error() != "Artist not found" {
+		t.Errorf("unexpected error message: %q", err.Error())
+	}
 }
 
 func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {
@@ -138,6 +143,9 @@ func TestGetArtistSetlists_NoSetlistsFound(t *testing.T) {
 	_, err := svc.SetlistToPlaylist(context.Background(), "Sprout", false, false)
 	if err == nil {
 		t.Fatal("expected error for empty setlists, got nil")
+	}
+	if err.Error() != `no setlists found for "Sprout"` {
+		t.Errorf("unexpected error message: %q", err.Error())
 	}
 }
 
@@ -226,6 +234,28 @@ func TestSetlistToPlaylistAuthed_SpotifyOperationError(t *testing.T) {
 	_, err := svc.SetlistToPlaylistAuthed(context.Background(), "Sprout", "tok", false, false)
 	if !errors.Is(err, underlying) {
 		t.Errorf("expected wrapped spotify error, got %v", err)
+	}
+}
+
+func TestSetlistToPlaylistAuthed_NoSongsFoundOnSpotify(t *testing.T) {
+	artist := domain.Artist{MBID: "abc", Name: "Sprout"}
+	setlists := []domain.Setlist{{Artist: artist, Tracks: []domain.Track{{Name: "Unreleased Song"}}}}
+	spotify := &mockSpotify{uris: nil, playlistID: "p1"}
+
+	svc := newSvc(
+		&mockSetlistfm{result: []domain.Artist{artist}, setlists: setlists},
+		spotify,
+	)
+
+	_, err := svc.SetlistToPlaylistAuthed(context.Background(), "sprout", "tok", false, false)
+	if err == nil {
+		t.Fatal("expected error when no songs are found on Spotify, got nil")
+	}
+	if err.Error() != `songs from setlistfm for "sprout" not found on Spotify` {
+		t.Errorf("unexpected error message: %q", err.Error())
+	}
+	if spotify.createPlaylistCalled {
+		t.Error("expected no playlist to be created")
 	}
 }
 

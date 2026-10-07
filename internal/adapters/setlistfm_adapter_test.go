@@ -51,8 +51,25 @@ func TestSearchArtists_HappyPath(t *testing.T) {
 	}
 }
 
+// Setlist.fm answers a search with no matches with 404.
+func TestSearchArtists_NotFoundMeansNoArtists(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.SearchArtists(context.Background(), "Nonexistent Band")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected no artists, got %+v", result)
+	}
+}
+
 func TestSearchArtists_NonOKStatus(t *testing.T) {
-	for _, status := range []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusInternalServerError} {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
 		status := status
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -163,8 +180,33 @@ func TestGetSetlists_SkipsUnnamedSongs(t *testing.T) {
 	}
 }
 
+// Setlist.fm answers with 404 when there are no setlists. That's an answer, not a failure: no retries.
+func TestGetSetlists_NotFoundMeansNoSetlists(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	slept := false
+	adapter.sleepFn = func(time.Duration) { slept = true }
+
+	result, err := adapter.GetSetlists(context.Background(), domain.Artist{MBID: "abc123"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected no setlists, got %+v", result)
+	}
+	if attempts != 1 || slept {
+		t.Errorf("expected a single attempt without waiting, got %d attempts (slept: %v)", attempts, slept)
+	}
+}
+
 func TestGetSetlists_NonOKStatus(t *testing.T) {
-	for _, status := range []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusInternalServerError} {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
 		status := status
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -446,8 +488,33 @@ func TestGetSetlistsForTour_HappyPath(t *testing.T) {
 	}
 }
 
+// Setlist.fm answers with 404 when there are no setlists. That's an answer, not a failure: no retries.
+func TestGetSetlistsForTour_NotFoundMeansNoSetlists(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	slept := false
+	adapter.sleepFn = func(time.Duration) { slept = true }
+
+	result, err := adapter.GetSetlistsForTour(context.Background(), domain.Artist{MBID: "abc123"}, "Some Tour")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected no setlists, got %+v", result)
+	}
+	if attempts != 1 || slept {
+		t.Errorf("expected a single attempt without waiting, got %d attempts (slept: %v)", attempts, slept)
+	}
+}
+
 func TestGetSetlistsForTour_NonOKStatus(t *testing.T) {
-	for _, status := range []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusInternalServerError} {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
 		status := status
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
