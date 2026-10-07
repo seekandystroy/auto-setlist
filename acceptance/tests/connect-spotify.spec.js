@@ -47,6 +47,7 @@ test.describe('Connecting to Spotify', () => {
     await expect(page.getByText('Spotify auth error: Invalid authorization code', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Connect to Spotify' })).toBeVisible();
     await expect(page.getByPlaceholder('Artist name')).toBeHidden();
+    await expect(page).not.toHaveURL(/code=/);
   });
 
   test('A returning visitor goes straight to the artist form', async ({ page, world, connectAs }) => {

@@ -91,8 +91,6 @@ async function getAccessToken(code) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error_description || 'Token exchange failed');
   saveToken(data);
-  // Remove code from URL without adding a history entry
-  window.history.replaceState({}, '', window.location.pathname);
 }
 
 // --- UI ---
@@ -143,6 +141,8 @@ async function init() {
       notification.textContent = `Spotify auth error: ${err.message}`;
       connectError.replaceChildren(notification);
     }
+    // The code is single-use: drop it from the URL whether or not it worked, without adding a history entry
+    window.history.replaceState({}, '', window.location.pathname);
   }
 
   const token = await getValidToken().catch(() => null);
