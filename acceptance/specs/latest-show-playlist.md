@@ -66,6 +66,12 @@ The artist used is Setlist.fm's best match for the typed name, and the playlist 
 - **Then** they see the error `songs from setlistfm for "<artist>" not found on Spotify`
 - **And** no playlist is created
 
+### Errors show the artist's name exactly as typed
+
+- **Given** an artist Setlist.fm knows as "<b>Hellripper</b>" but has no setlists for
+- **When** a connected visitor types "<b>Hellripper</b>" and clicks "Create Playlist"
+- **Then** they see the error `no setlists found for "<b>Hellripper</b>"`, with the tags shown as text rather than turning the name bold
+
 ### The button is disabled until an artist is typed
 
 - **Given** a connected visitor on the artist form

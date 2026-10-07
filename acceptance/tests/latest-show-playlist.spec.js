@@ -140,6 +140,18 @@ test.describe('Playlist from the latest show', () => {
     expect(await world.playlists()).toEqual([]);
   });
 
+  test("Errors show the artist's name exactly as typed", async ({ page, world }) => {
+    await world.load({
+      setlistfm: { artists: [{ name: '<b>Hellripper</b>', setlists: [] }] },
+      spotify: { users: [visitor], catalog: hellripperCatalog },
+    });
+    await page.goto('/');
+
+    await createPlaylist(page, '<b>Hellripper</b>');
+
+    await expect(page.getByText('no setlists found for "<b>Hellripper</b>"', { exact: true })).toBeVisible();
+  });
+
   test('The button is disabled until an artist is typed', async ({ page, world }) => {
     await world.load(hellripperWith([{ sets: [['All Hail the Goat']] }]));
     await page.goto('/');
