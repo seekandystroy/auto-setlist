@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-auto-setlist turns concert setlists into Spotify playlists. Given an artist, it takes their latest show (or every song from the tour of that show) from Setlist.fm and creates a playlist in the user's Spotify account. Covers can fall back to the original artist's recording.
+auto-setlist turns concert setlists into Spotify playlists. Given an artist, it takes their latest show (or every song from the tour of that show) from Setlist.fm and creates a playlist in the user's Spotify account. Given a Setlist.fm setlist link instead, it uses that specific show. Covers can fall back to the original artist's recording.
 
 There are two entry points that share the same core:
-- **Web app** (`cmd/server`): a vanilla JS frontend in `static/` plus a JSON API (`POST /setlistjob`). Spotify auth (PKCE) happens in the browser, and the token is sent in the `Autosetlist-Spotify-Token` header. Deployed on Render.
-- **CLI** (`cmd/cli`): `auto-setlist [--include-covers|-ic] [--tour-playlist|-tp] <artist>`. Spotify auth goes through a local callback server, and the token is cached in `./spotify_token.json`.
+- **Web app** (`cmd/server`): a vanilla JS frontend in `static/` plus a JSON API (`POST /setlistjob`, which takes either `artist` or a Setlist.fm `url`). Spotify auth (PKCE) happens in the browser, and the token is sent in the `Autosetlist-Spotify-Token` header. Deployed on Render.
+- **CLI** (`cmd/cli`): `auto-setlist [--include-covers|-ic] [--tour-playlist|-tp] <artist>`, or `auto-setlist [--include-covers|-ic] --url|-u <setlist.fm link>`. Spotify auth goes through a local callback server, and the token is cached in `./spotify_token.json`.
 
 Both need `SETLISTFM_API_KEY`, `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`. The server also reads `PORT` (default 3000), plus `SETLISTFM_BASE_URL` and `SPOTIFY_API_BASE_URL`, which are optional, default to the real APIs, and exist so the acceptance tests can point the app at fakes.
 
