@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strings"
 	"time"
 
 	applog "github.com/seekandystroy/auto-setlist/internal"
@@ -57,13 +59,18 @@ type setlistfmTour struct {
 }
 
 type setlistfmSetlist struct {
-	Sets setlistfmSets  `json:"sets"`
-	Tour *setlistfmTour `json:"tour,omitempty"`
+	Artist setlistfmArtist `json:"artist"`
+	Sets   setlistfmSets   `json:"sets"`
+	Tour   *setlistfmTour  `json:"tour,omitempty"`
 }
 
 type setlistfmSetlistsResponse struct {
 	Setlists []setlistfmSetlist `json:"setlist"`
 }
+
+// setlistPathPattern matches the path of a setlist link, /setlist/<artist>/<year>/<venue>-<id>.html,
+// capturing the ID (8 hex digits).
+var setlistPathPattern = regexp.MustCompile(`^/setlist/[^/]+/\d{4}/[^/]*-([0-9a-f]{8})\.html$`)
 
 // SetlistfmOption configures optional settings on the Setlist.fm adapter.
 type SetlistfmOption func(*setlistfmAdapter)
@@ -148,22 +155,69 @@ func (c *setlistfmAdapter) GetSetlistsForTour(ctx context.Context, artist domain
 	return c.fetchSetlists(ctx, endpoint, artist)
 }
 
-// fetchSetlists GETs a page of setlists, retrying failures with exponential backoff.
+// SetlistIDFromURL extracts the setlist ID from a setlist.fm setlist link, e.g.
+// https://www.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html.
+func (c *setlistfmAdapter) SetlistIDFromURL(rawURL string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", domain.ErrInvalidSetlistURL
+	}
+	host := strings.ToLower(u.Hostname())
+	if host != "setlist.fm" && !strings.HasSuffix(host, ".setlist.fm") {
+		return "", domain.ErrInvalidSetlistURL
+	}
+	m := setlistPathPattern.FindStringSubmatch(u.Path)
+	if m == nil {
+		return "", domain.ErrInvalidSetlistURL
+	}
+	return m[1], nil
+}
+
+func (c *setlistfmAdapter) GetSetlist(ctx context.Context, setlistID string) (*domain.Setlist, error) {
+	applog.LoggerFromCtx(ctx).Info("Getting setlist from SetlistFM", "setlist_id", setlistID)
+	endpoint := fmt.Sprintf("%s/setlist/%s", c.baseURL, url.PathEscape(setlistID))
+
+	var result setlistfmSetlist
+	found, err := c.getJSON(ctx, endpoint, &result)
+	if err != nil || !found {
+		return nil, err
+	}
+	setlist := toDomainSetlist(result, domain.Artist{MBID: result.Artist.MBID, Name: result.Artist.Name})
+	return &setlist, nil
+}
+
+// fetchSetlists GETs a page of setlists.
 func (c *setlistfmAdapter) fetchSetlists(ctx context.Context, endpoint string, artist domain.Artist) ([]domain.Setlist, error) {
+	var result setlistfmSetlistsResponse
+	found, err := c.getJSON(ctx, endpoint, &result)
+	if err != nil || !found {
+		return nil, err
+	}
+
+	setlists := make([]domain.Setlist, len(result.Setlists))
+	for i, sl := range result.Setlists {
+		setlists[i] = toDomainSetlist(sl, artist)
+	}
+	return setlists, nil
+}
+
+// getJSON GETs endpoint and decodes the response into v, retrying failures with exponential backoff.
+// It reports found=false, without error, when setlist.fm answers 404.
+func (c *setlistfmAdapter) getJSON(ctx context.Context, endpoint string, v any) (bool, error) {
 	log := applog.LoggerFromCtx(ctx)
 
 	var lastErr error
 	wait := time.Second
 	for attempt := range 4 {
 		if attempt > 0 {
-			log.Warn("GET setlists got error, waiting and retrying", "wait", wait)
+			log.Warn("GET from SetlistFM got error, waiting and retrying", "wait", wait)
 			c.sleepFn(wait)
 			wait *= 2
 		}
 
 		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 		if err != nil {
-			return nil, fmt.Errorf("setlistfm: building request: %w", err)
+			return false, fmt.Errorf("setlistfm: building request: %w", err)
 		}
 		req.Header.Set("x-api-key", c.apiKey)
 		req.Header.Set("Accept", "application/json")
@@ -175,10 +229,10 @@ func (c *setlistfmAdapter) fetchSetlists(ctx context.Context, endpoint string, a
 			continue
 		}
 
-		// Setlist.fm answers with 404 when there are no setlists. Retrying won't change that.
+		// Setlist.fm answers with 404 when there's nothing to return. Retrying won't change that.
 		if resp.StatusCode == http.StatusNotFound {
 			resp.Body.Close()
-			return nil, nil
+			return false, nil
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
@@ -186,36 +240,34 @@ func (c *setlistfmAdapter) fetchSetlists(ctx context.Context, endpoint string, a
 			continue
 		}
 
-		var result setlistfmSetlistsResponse
-		err = json.NewDecoder(resp.Body).Decode(&result)
+		err = json.NewDecoder(resp.Body).Decode(v)
 		resp.Body.Close()
 		if err != nil {
-			return nil, fmt.Errorf("setlistfm: decoding response: %w", err)
+			return false, fmt.Errorf("setlistfm: decoding response: %w", err)
 		}
-
-		setlists := make([]domain.Setlist, len(result.Setlists))
-		for i, sl := range result.Setlists {
-			var tracks []domain.Track
-			for _, set := range sl.Sets.Set {
-				for _, song := range set.Songs {
-					if song.Name == "" {
-						continue
-					}
-					var coverName string
-					if song.Cover != nil {
-						coverName = song.Cover.Name
-					}
-					tracks = append(tracks, domain.Track{Name: song.Name, CoveredArtistName: coverName})
-				}
-			}
-			var tourName string
-			if sl.Tour != nil {
-				tourName = sl.Tour.Name
-			}
-			setlists[i] = domain.Setlist{Artist: artist, Tracks: tracks, Tour: tourName}
-		}
-		return setlists, nil
+		return true, nil
 	}
 
-	return nil, lastErr
+	return false, lastErr
+}
+
+func toDomainSetlist(sl setlistfmSetlist, artist domain.Artist) domain.Setlist {
+	var tracks []domain.Track
+	for _, set := range sl.Sets.Set {
+		for _, song := range set.Songs {
+			if song.Name == "" {
+				continue
+			}
+			var coverName string
+			if song.Cover != nil {
+				coverName = song.Cover.Name
+			}
+			tracks = append(tracks, domain.Track{Name: song.Name, CoveredArtistName: coverName})
+		}
+	}
+	var tourName string
+	if sl.Tour != nil {
+		tourName = sl.Tour.Name
+	}
+	return domain.Setlist{Artist: artist, Tracks: tracks, Tour: tourName}
 }

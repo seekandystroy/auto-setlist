@@ -112,6 +112,7 @@ const mainDiv = document.getElementById('main');
 const input = document.getElementById('artist');
 const submitBtn = document.getElementById('submit');
 const result = document.getElementById('result');
+const modeDiv = document.getElementById('mode');
 const modeLatestBtn = document.getElementById('mode-latest');
 const modeTourBtn = document.getElementById('mode-tour');
 
@@ -167,6 +168,9 @@ connectBtn.addEventListener('click', () => redirectToAuthCodeFlow());
 
 let requestCompleted = false;
 
+// Anything that looks like a link is sent as a Setlist.fm setlist link; the server checks it.
+const looksLikeURL = (value) => /^https?:\/\//i.test(value);
+
 function onInputChange() {
   if (requestCompleted) {
     requestCompleted = false;
@@ -174,6 +178,8 @@ function onInputChange() {
     result.replaceChildren();
   }
   submitBtn.disabled = input.value.trim() === '';
+  // A link is one specific show, so "Latest show / Whole tour" doesn't apply.
+  modeDiv.style.display = looksLikeURL(input.value.trim()) ? 'none' : '';
 }
 
 input.addEventListener('input', onInputChange);
@@ -197,13 +203,17 @@ submitBtn.addEventListener('click', async () => {
       showConnect();
       return;
     }
+    const value = input.value.trim();
+    const job = looksLikeURL(value)
+      ? { url: value, include_covers: true }
+      : { artist: value, include_covers: true, tour_playlist: tourMode };
     const resp = await fetch('/setlistjob', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Autosetlist-Spotify-Token': token,
       },
-      body: JSON.stringify({ artist: input.value.trim(), include_covers: true, tour_playlist: tourMode }),
+      body: JSON.stringify(job),
     });
     const data = await resp.json();
     if (!resp.ok) {

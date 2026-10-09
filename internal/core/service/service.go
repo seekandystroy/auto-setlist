@@ -89,6 +89,46 @@ func (s *service) SetlistToPlaylistAuthed(ctx context.Context, artistName, token
 	return playlistID, nil
 }
 
+func (s *service) SetlistURLToPlaylist(ctx context.Context, setlistURL string, includeCovers bool) (string, error) {
+	// Reject a bad link before asking for a token, which may start the OAuth flow.
+	if _, err := s.setlistfm.SetlistIDFromURL(setlistURL); err != nil {
+		return "", err
+	}
+	token, err := s.spotify.GetValidToken()
+	if err != nil {
+		return "", fmt.Errorf("service: getting spotify token: %w", err)
+	}
+	return s.SetlistURLToPlaylistAuthed(ctx, setlistURL, token, includeCovers)
+}
+
+func (s *service) SetlistURLToPlaylistAuthed(ctx context.Context, setlistURL, token string, includeCovers bool) (string, error) {
+	setlistID, err := s.setlistfm.SetlistIDFromURL(setlistURL)
+	if err != nil {
+		return "", err
+	}
+
+	setlist, err := s.setlistfm.GetSetlist(ctx, setlistID)
+	if err != nil {
+		return "", fmt.Errorf("fetching setlist %q: %w", setlistID, err)
+	}
+	if setlist == nil {
+		return "", errors.New("Setlist not found")
+	}
+	if len(setlist.Tracks) == 0 {
+		return "", errors.New("this setlist has no songs yet")
+	}
+
+	uris, err := s.spotify.GetSetlistTracks(ctx, token, *setlist, includeCovers)
+	if err != nil {
+		return "", err
+	}
+	if len(uris) == 0 {
+		return "", fmt.Errorf("songs from setlistfm for %q not found on Spotify", setlist.Artist.Name)
+	}
+
+	return s.spotify.CreatePlaylist(ctx, token, *setlist, uris, false)
+}
+
 func mergeSetlistTracks(setlists []domain.Setlist) []domain.Track {
 	seen := make(map[string]bool)
 	var result []domain.Track

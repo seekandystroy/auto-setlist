@@ -16,6 +16,12 @@ type mockSetlistfm struct {
 	tourSetlists     []domain.Setlist
 	tourSetlistsErr  error
 	receivedTourName string
+	setlistID        string
+	setlistIDErr     error
+	setlist          *domain.Setlist
+	setlistErr       error
+	receivedURL      string
+	receivedID       string
 }
 
 func (m *mockSetlistfm) SearchArtists(_ context.Context, name string) ([]domain.Artist, error) {
@@ -31,6 +37,16 @@ func (m *mockSetlistfm) GetSetlistsForTour(_ context.Context, artist domain.Arti
 	return m.tourSetlists, m.tourSetlistsErr
 }
 
+func (m *mockSetlistfm) SetlistIDFromURL(rawURL string) (string, error) {
+	m.receivedURL = rawURL
+	return m.setlistID, m.setlistIDErr
+}
+
+func (m *mockSetlistfm) GetSetlist(_ context.Context, setlistID string) (*domain.Setlist, error) {
+	m.receivedID = setlistID
+	return m.setlist, m.setlistErr
+}
+
 type mockSpotify struct {
 	token                 string
 	uris                  []string
@@ -40,9 +56,12 @@ type mockSpotify struct {
 	receivedToken         string
 	receivedIncludeCovers bool
 	createPlaylistCalled  bool
+	tokenRequested        bool
+	receivedTourPlaylist  bool
 }
 
 func (m *mockSpotify) GetValidToken() (string, error) {
+	m.tokenRequested = true
 	return m.token, m.err
 }
 
@@ -53,8 +72,9 @@ func (m *mockSpotify) GetSetlistTracks(_ context.Context, token string, s domain
 	return m.uris, m.err
 }
 
-func (m *mockSpotify) CreatePlaylist(_ context.Context, token string, _ domain.Setlist, _ []string, _ bool) (string, error) {
+func (m *mockSpotify) CreatePlaylist(_ context.Context, token string, _ domain.Setlist, _ []string, tourPlaylist bool) (string, error) {
 	m.receivedToken = token
+	m.receivedTourPlaylist = tourPlaylist
 	m.createPlaylistCalled = true
 	return m.playlistID, m.err
 }
@@ -387,5 +407,146 @@ func TestMergeSetlistTracks_Empty(t *testing.T) {
 	}
 	if result := mergeSetlistTracks([]domain.Setlist{}); len(result) != 0 {
 		t.Errorf("expected empty result for empty setlists, got %+v", result)
+	}
+}
+
+const beatlesLink = "https://www.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html"
+
+func beatlesSetlist() *domain.Setlist {
+	return &domain.Setlist{
+		Artist: domain.Artist{MBID: "b10bbbfc", Name: "The Beatles"},
+		Tracks: []domain.Track{{Name: "Twist and Shout"}, {Name: "She Loves You"}},
+		Tour:   "North American Tour 1964",
+	}
+}
+
+func TestSetlistURLToPlaylistAuthed_HappyPath(t *testing.T) {
+	setlistfm := &mockSetlistfm{setlistID: "63de4613", setlist: beatlesSetlist()}
+	spotify := &mockSpotify{uris: []string{"spotify:track:uri1"}, playlistID: "playlist-from-link"}
+	svc := newSvc(setlistfm, spotify)
+
+	playlistID, err := svc.SetlistURLToPlaylistAuthed(context.Background(), beatlesLink, "user-token", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if playlistID != "playlist-from-link" {
+		t.Errorf("unexpected playlist ID: %s", playlistID)
+	}
+	if setlistfm.receivedURL != beatlesLink || setlistfm.receivedID != "63de4613" {
+		t.Errorf("expected link parsed and setlist 63de4613 fetched, got URL %q and ID %q", setlistfm.receivedURL, setlistfm.receivedID)
+	}
+	if spotify.receivedSetlist.Artist.Name != "The Beatles" || len(spotify.receivedSetlist.Tracks) != 2 {
+		t.Errorf("expected the fetched setlist sent to spotify, got %+v", spotify.receivedSetlist)
+	}
+	if spotify.receivedToken != "user-token" {
+		t.Errorf("expected token %q forwarded to spotify, got %q", "user-token", spotify.receivedToken)
+	}
+	if spotify.receivedTourPlaylist {
+		t.Error("expected a single-show playlist, got a tour playlist")
+	}
+}
+
+func TestSetlistURLToPlaylistAuthed_InvalidURL(t *testing.T) {
+	setlistfm := &mockSetlistfm{setlistIDErr: domain.ErrInvalidSetlistURL}
+	spotify := &mockSpotify{}
+	svc := newSvc(setlistfm, spotify)
+
+	_, err := svc.SetlistURLToPlaylistAuthed(context.Background(), "https://example.com", "tok", false)
+	if !errors.Is(err, domain.ErrInvalidSetlistURL) {
+		t.Fatalf("expected ErrInvalidSetlistURL, got %v", err)
+	}
+	if err.Error() != "only setlist.fm setlist links are supported" {
+		t.Errorf("unexpected error message: %q", err.Error())
+	}
+	if setlistfm.receivedID != "" || spotify.createPlaylistCalled {
+		t.Error("expected nothing fetched and no playlist created")
+	}
+}
+
+func TestSetlistURLToPlaylistAuthed_SetlistNotFound(t *testing.T) {
+	spotify := &mockSpotify{}
+	svc := newSvc(&mockSetlistfm{setlistID: "deadbeef"}, spotify)
+
+	_, err := svc.SetlistURLToPlaylistAuthed(context.Background(), beatlesLink, "tok", false)
+	if err == nil || err.Error() != "Setlist not found" {
+		t.Fatalf("expected %q, got %v", "Setlist not found", err)
+	}
+	if spotify.createPlaylistCalled {
+		t.Error("expected no playlist to be created")
+	}
+}
+
+func TestSetlistURLToPlaylistAuthed_SetlistWithoutSongs(t *testing.T) {
+	empty := beatlesSetlist()
+	empty.Tracks = nil
+	spotify := &mockSpotify{}
+	svc := newSvc(&mockSetlistfm{setlistID: "63de4613", setlist: empty}, spotify)
+
+	_, err := svc.SetlistURLToPlaylistAuthed(context.Background(), beatlesLink, "tok", false)
+	if err == nil || err.Error() != "this setlist has no songs yet" {
+		t.Fatalf("expected %q, got %v", "this setlist has no songs yet", err)
+	}
+	if spotify.createPlaylistCalled {
+		t.Error("expected no playlist to be created")
+	}
+}
+
+func TestSetlistURLToPlaylistAuthed_NoSongsFoundOnSpotify(t *testing.T) {
+	spotify := &mockSpotify{uris: nil, playlistID: "p1"}
+	svc := newSvc(&mockSetlistfm{setlistID: "63de4613", setlist: beatlesSetlist()}, spotify)
+
+	_, err := svc.SetlistURLToPlaylistAuthed(context.Background(), beatlesLink, "tok", false)
+	if err == nil || err.Error() != `songs from setlistfm for "The Beatles" not found on Spotify` {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if spotify.createPlaylistCalled {
+		t.Error("expected no playlist to be created")
+	}
+}
+
+func TestSetlistURLToPlaylistAuthed_SetlistfmError(t *testing.T) {
+	underlying := errors.New("setlistfm down")
+	svc := newSvc(&mockSetlistfm{setlistID: "63de4613", setlistErr: underlying}, &mockSpotify{})
+
+	_, err := svc.SetlistURLToPlaylistAuthed(context.Background(), beatlesLink, "tok", false)
+	if !errors.Is(err, underlying) {
+		t.Errorf("expected wrapped setlistfm error, got %v", err)
+	}
+}
+
+func TestSetlistURLToPlaylistAuthed_PassesIncludeCoversToSpotify(t *testing.T) {
+	spotify := &mockSpotify{uris: []string{"spotify:track:uri1"}, playlistID: "p1"}
+	svc := newSvc(&mockSetlistfm{setlistID: "63de4613", setlist: beatlesSetlist()}, spotify)
+
+	if _, err := svc.SetlistURLToPlaylistAuthed(context.Background(), beatlesLink, "tok", true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !spotify.receivedIncludeCovers {
+		t.Error("expected includeCovers=true to be forwarded to spotify, got false")
+	}
+}
+
+func TestSetlistURLToPlaylist_UsesStoredToken(t *testing.T) {
+	spotify := &mockSpotify{token: "cli-token", uris: []string{"spotify:track:uri1"}, playlistID: "p1"}
+	svc := newSvc(&mockSetlistfm{setlistID: "63de4613", setlist: beatlesSetlist()}, spotify)
+
+	if _, err := svc.SetlistURLToPlaylist(context.Background(), beatlesLink, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if spotify.receivedToken != "cli-token" {
+		t.Errorf("expected token %q forwarded to spotify, got %q", "cli-token", spotify.receivedToken)
+	}
+}
+
+func TestSetlistURLToPlaylist_InvalidURLDoesNotAskForToken(t *testing.T) {
+	spotify := &mockSpotify{}
+	svc := newSvc(&mockSetlistfm{setlistIDErr: domain.ErrInvalidSetlistURL}, spotify)
+
+	_, err := svc.SetlistURLToPlaylist(context.Background(), "https://example.com", false)
+	if !errors.Is(err, domain.ErrInvalidSetlistURL) {
+		t.Fatalf("expected ErrInvalidSetlistURL, got %v", err)
+	}
+	if spotify.tokenRequested {
+		t.Error("expected no spotify token to be requested for an invalid link")
 	}
 }

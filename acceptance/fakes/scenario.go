@@ -30,6 +30,9 @@ type Artist struct {
 }
 
 type Setlist struct {
+	// ID is setlist.fm's setlist ID, the last part of the setlist's link; defaults to a value
+	// derived from the artist and the position.
+	ID string `json:"id,omitempty"`
 	// EventDate uses setlist.fm's dd-MM-yyyy format; defaults to a date derived from the position.
 	EventDate string `json:"eventDate,omitempty"`
 	Tour      string `json:"tour,omitempty"`

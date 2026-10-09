@@ -31,6 +31,7 @@ func NewSetlistfm() *Setlistfm {
 	f.mux.HandleFunc("GET /search/artists", f.searchArtists)
 	f.mux.HandleFunc("GET /artist/{mbid}/setlists", f.artistSetlists)
 	f.mux.HandleFunc("GET /search/setlists", f.searchSetlists)
+	f.mux.HandleFunc("GET /setlist/{setlistId}", f.setlist)
 	return f
 }
 
@@ -127,6 +128,22 @@ func (f *Setlistfm) searchSetlists(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeSetlistsPage(w, r, setlists)
+}
+
+func (f *Setlistfm) setlist(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("setlistId")
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	for _, a := range f.artists {
+		for _, sl := range setlistsJSON(a) {
+			if sl.ID == id {
+				writeJSON(w, http.StatusOK, sl)
+				return
+			}
+		}
+	}
+	writeSetlistfmError(w, http.StatusNotFound, "not found")
 }
 
 func writeSetlistsPage(w http.ResponseWriter, r *http.Request, setlists []setlistJSON) {
@@ -260,7 +277,14 @@ func setlistsJSON(a Artist) []setlistJSON {
 		if city == "" {
 			city = "Lisbon"
 		}
-		id := shortHash(fmt.Sprintf("%s/%d", a.MBID, i))
+		id := sl.ID
+		if id == "" {
+			id = shortHash(fmt.Sprintf("%s/%d", a.MBID, i))
+		}
+		year := "2026"
+		if d, err := time.Parse("02-01-2006", date); err == nil {
+			year = d.Format("2006")
+		}
 
 		sets := setsJSON{Set: []setJSON{}}
 		for j, songs := range sl.Sets {
@@ -303,7 +327,7 @@ func setlistsJSON(a Artist) []setlistJSON {
 			},
 			Tour: tour,
 			Sets: sets,
-			URL:  fmt.Sprintf("https://www.setlist.fm/setlist/%s/%s.html", slug(a.Name), id),
+			URL:  fmt.Sprintf("https://www.setlist.fm/setlist/%s/%s/%s-%s-%s.html", slug(a.Name), year, slug(venue), slug(city), id),
 		}
 	}
 	return result

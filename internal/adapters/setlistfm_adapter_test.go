@@ -3,6 +3,7 @@ package adapters
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -636,5 +637,180 @@ func TestNewSetlistfmAdapter_WithBaseURL(t *testing.T) {
 	}
 	if gotPath != "/rest/1.0/search/artists" {
 		t.Errorf("expected request to /rest/1.0/search/artists, got %q", gotPath)
+	}
+}
+
+func TestSetlistIDFromURL_SetlistLinks(t *testing.T) {
+	tests := map[string]string{
+		"https://www.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html":                    "63de4613",
+		"http://www.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html":                     "63de4613",
+		"https://setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html":                        "63de4613",
+		"https://de.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html":                     "63de4613",
+		"https://WWW.Setlist.FM/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html":                    "63de4613",
+		"https://www.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html?utm_source=x#songs": "63de4613",
+	}
+	adapter := newTestAdapter("")
+	for link, want := range tests {
+		got, err := adapter.SetlistIDFromURL(link)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", link, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s: expected ID %q, got %q", link, want, got)
+		}
+	}
+}
+
+func TestSetlistIDFromURL_RejectsOtherLinks(t *testing.T) {
+	tests := []string{
+		"",
+		"Hellripper",
+		"not a url %%%",
+		"ftp://www.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html",
+		"https://example.com/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html",
+		"https://notsetlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html",
+		"https://www.setlist.fm.example.com/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html",
+		"https://www.setlist.fm/setlists/the-beatles-23d6a88b.html",
+		"https://www.setlist.fm/venue/compaq-center-san-jose-ca-usa-6bd6ca6e.html",
+		"https://www.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca.html",
+		"https://www.setlist.fm/setlist/the-beatles/hollywood-bowl-hollywood-ca-63de4613.html",
+		"https://www.setlist.fm/",
+	}
+	adapter := newTestAdapter("")
+	for _, link := range tests {
+		id, err := adapter.SetlistIDFromURL(link)
+		if !errors.Is(err, domain.ErrInvalidSetlistURL) {
+			t.Errorf("%q: expected ErrInvalidSetlistURL, got ID %q and error %v", link, id, err)
+		}
+	}
+}
+
+func TestGetSetlist_HappyPath(t *testing.T) {
+	response := setlistfmSetlist{
+		Artist: setlistfmArtist{MBID: "b10bbbfc", Name: "The Beatles"},
+		Sets: setlistfmSets{Set: []setlistfmSet{
+			{Songs: []setlistfmSong{{Name: "Twist and Shout", Cover: &setlistfmCoverArtist{Name: "The Top Notes"}}, {Name: ""}, {Name: "She Loves You"}}},
+			{Songs: []setlistfmSong{{Name: "Long Tall Sally"}}},
+		}},
+		Tour: &setlistfmTour{Name: "North American Tour 1964"},
+	}
+	var gotPath, gotAPIKey, gotAccept string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAPIKey = r.Header.Get("x-api-key")
+		gotAccept = r.Header.Get("Accept")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlist(context.Background(), "63de4613")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/setlist/63de4613" {
+		t.Errorf("expected request to /setlist/63de4613, got %q", gotPath)
+	}
+	if gotAPIKey != "test-key" || gotAccept != "application/json" {
+		t.Errorf("unexpected headers: x-api-key %q, Accept %q", gotAPIKey, gotAccept)
+	}
+	expected := domain.Setlist{
+		Artist: domain.Artist{MBID: "b10bbbfc", Name: "The Beatles"},
+		Tracks: []domain.Track{
+			{Name: "Twist and Shout", CoveredArtistName: "The Top Notes"},
+			{Name: "She Loves You"},
+			{Name: "Long Tall Sally"},
+		},
+		Tour: "North American Tour 1964",
+	}
+	if result == nil {
+		t.Fatal("expected a setlist, got nil")
+	}
+	if result.Artist != expected.Artist || result.Tour != expected.Tour || len(result.Tracks) != len(expected.Tracks) {
+		t.Fatalf("expected %+v, got %+v", expected, *result)
+	}
+	for i := range expected.Tracks {
+		if result.Tracks[i] != expected.Tracks[i] {
+			t.Errorf("track %d: expected %+v, got %+v", i, expected.Tracks[i], result.Tracks[i])
+		}
+	}
+}
+
+// Setlist.fm answers with 404 for an unknown setlist ID. That's an answer, not a failure: no retries.
+func TestGetSetlist_NotFoundMeansNoSetlist(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlist(context.Background(), "deadbeef")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Errorf("expected no setlist, got %+v", *result)
+	}
+	if attempts != 1 {
+		t.Errorf("expected a single attempt, got %d", attempts)
+	}
+}
+
+func TestGetSetlist_RetriesOnFailureThenSucceeds(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(setlistfmSetlist{
+			Sets: setlistfmSets{Set: []setlistfmSet{{Songs: []setlistfmSong{{Name: "Song A"}}}}},
+		})
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	result, err := adapter.GetSetlist(context.Background(), "63de4613")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts, got %d", attempts)
+	}
+	if result == nil || len(result.Tracks) != 1 || result.Tracks[0].Name != "Song A" {
+		t.Errorf("unexpected result: %+v", result)
+	}
+}
+
+func TestGetSetlist_ExhaustsAllRetries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	_, err := adapter.GetSetlist(context.Background(), "63de4613")
+	if err == nil || !strings.Contains(err.Error(), "unexpected status 500") {
+		t.Errorf("expected 'unexpected status 500' error, got %v", err)
+	}
+}
+
+func TestGetSetlist_MalformedJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("not json {{{"))
+	}))
+	defer srv.Close()
+
+	adapter := newTestAdapter(srv.URL)
+	_, err := adapter.GetSetlist(context.Background(), "63de4613")
+	if err == nil || !strings.Contains(err.Error(), "decoding response") {
+		t.Errorf("expected 'decoding response' error, got %v", err)
 	}
 }

@@ -2,11 +2,13 @@ package adapters
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	applog "github.com/seekandystroy/auto-setlist/internal"
+	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 	"github.com/seekandystroy/auto-setlist/internal/ports"
 )
 
@@ -33,6 +35,7 @@ func NewAPIAdapter(svc ports.SetlistService) http.Handler {
 
 type setlistJobRequest struct {
 	Artist        string `json:"artist"`
+	URL           string `json:"url"`
 	IncludeCovers bool   `json:"include_covers"`
 	TourPlaylist  bool   `json:"tour_playlist"`
 }
@@ -75,8 +78,19 @@ func (a *apiAdapter) handleSetlistJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Artist = strings.TrimSpace(req.Artist)
-	if req.Artist == "" {
-		detail = "artist is required"
+	req.URL = strings.TrimSpace(req.URL)
+	if req.Artist != "" && req.URL != "" {
+		detail = "send either artist or url, not both"
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
+		return
+	}
+	if req.Artist == "" && req.URL == "" {
+		detail = "artist or url is required"
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
+		return
+	}
+	if len(req.URL) > 500 {
+		detail = "url must be 500 characters or fewer"
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
 		return
 	}
@@ -85,10 +99,21 @@ func (a *apiAdapter) handleSetlistJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": detail})
 		return
 	}
-	id, err := a.svc.SetlistToPlaylistAuthed(ctx, req.Artist, token, req.IncludeCovers, req.TourPlaylist)
+
+	var id string
+	var err error
+	if req.URL != "" {
+		id, err = a.svc.SetlistURLToPlaylistAuthed(ctx, req.URL, token, req.IncludeCovers)
+	} else {
+		id, err = a.svc.SetlistToPlaylistAuthed(ctx, req.Artist, token, req.IncludeCovers, req.TourPlaylist)
+	}
 	if err != nil {
 		detail = err.Error()
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": detail})
+		status := http.StatusInternalServerError
+		if errors.Is(err, domain.ErrInvalidSetlistURL) {
+			status = http.StatusBadRequest
+		}
+		writeJSON(w, status, map[string]string{"error": detail})
 		return
 	}
 	playlistURL := "https://open.spotify.com/playlist/" + id

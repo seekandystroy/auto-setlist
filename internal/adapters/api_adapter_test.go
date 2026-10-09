@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/seekandystroy/auto-setlist/internal/core/domain"
 )
 
 type mockSetlistService struct {
@@ -15,6 +17,8 @@ type mockSetlistService struct {
 	err                            error
 	receivedIncludeCovers          bool
 	receivedAllSongsFromLatestTour bool
+	receivedArtist                 string
+	receivedURL                    string
 }
 
 func (m *mockSetlistService) SetlistToPlaylist(_ context.Context, artist string, includeCovers, tourPlaylist bool) (string, error) {
@@ -24,9 +28,31 @@ func (m *mockSetlistService) SetlistToPlaylist(_ context.Context, artist string,
 }
 
 func (m *mockSetlistService) SetlistToPlaylistAuthed(_ context.Context, artist, token string, includeCovers, tourPlaylist bool) (string, error) {
+	m.receivedArtist = artist
 	m.receivedIncludeCovers = includeCovers
 	m.receivedAllSongsFromLatestTour = tourPlaylist
 	return m.playlistID, m.err
+}
+
+func (m *mockSetlistService) SetlistURLToPlaylist(_ context.Context, setlistURL string, includeCovers bool) (string, error) {
+	m.receivedURL = setlistURL
+	m.receivedIncludeCovers = includeCovers
+	return m.playlistID, m.err
+}
+
+func (m *mockSetlistService) SetlistURLToPlaylistAuthed(_ context.Context, setlistURL, token string, includeCovers bool) (string, error) {
+	m.receivedURL = setlistURL
+	m.receivedIncludeCovers = includeCovers
+	return m.playlistID, m.err
+}
+
+func errorOf(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("could not decode response: %v", err)
+	}
+	return body["error"]
 }
 
 func post(handler http.Handler, body string) *httptest.ResponseRecorder {
@@ -203,5 +229,98 @@ func TestSetlistJob_AllSongsFromLatestTourTrue(t *testing.T) {
 
 	if !svc.receivedAllSongsFromLatestTour {
 		t.Error("expected tourPlaylist=true to be forwarded to service, got false")
+	}
+}
+
+const setlistLink = "https://www.setlist.fm/setlist/the-beatles/1964/hollywood-bowl-hollywood-ca-63de4613.html"
+
+func TestSetlistJob_URLHappyPath(t *testing.T) {
+	svc := &mockSetlistService{playlistID: "abc123"}
+	handler := NewAPIAdapter(svc)
+	w := post(handler, `{"url":"  `+setlistLink+`  ","include_covers":true}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp setlistJobResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("could not decode response: %v", err)
+	}
+	if resp.PlaylistURL != "https://open.spotify.com/playlist/abc123" {
+		t.Errorf("unexpected playlist_url: %q", resp.PlaylistURL)
+	}
+	if svc.receivedURL != setlistLink {
+		t.Errorf("expected trimmed url %q forwarded to service, got %q", setlistLink, svc.receivedURL)
+	}
+	if svc.receivedArtist != "" {
+		t.Errorf("expected the artist flow not to run, got artist %q", svc.receivedArtist)
+	}
+	if !svc.receivedIncludeCovers {
+		t.Error("expected includeCovers=true to be forwarded to service, got false")
+	}
+}
+
+func TestSetlistJob_ArtistAndURL(t *testing.T) {
+	svc := &mockSetlistService{playlistID: "abc123"}
+	w := post(NewAPIAdapter(svc), `{"artist":"The Beatles","url":"`+setlistLink+`"}`)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	if got := errorOf(t, w); got != "send either artist or url, not both" {
+		t.Errorf("unexpected error: %q", got)
+	}
+	if svc.receivedURL != "" || svc.receivedArtist != "" {
+		t.Error("expected the service not to be called")
+	}
+}
+
+func TestSetlistJob_NeitherArtistNorURL(t *testing.T) {
+	w := post(NewAPIAdapter(&mockSetlistService{}), `{"artist":" ","url":" "}`)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	if got := errorOf(t, w); got != "artist or url is required" {
+		t.Errorf("unexpected error: %q", got)
+	}
+}
+
+func TestSetlistJob_URLTooLong(t *testing.T) {
+	svc := &mockSetlistService{}
+	w := post(NewAPIAdapter(svc), `{"url":"https://www.setlist.fm/`+strings.Repeat("a", 500)+`"}`)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	if got := errorOf(t, w); got != "url must be 500 characters or fewer" {
+		t.Errorf("unexpected error: %q", got)
+	}
+	if svc.receivedURL != "" {
+		t.Error("expected the service not to be called")
+	}
+}
+
+func TestSetlistJob_InvalidSetlistURL(t *testing.T) {
+	handler := NewAPIAdapter(&mockSetlistService{err: domain.ErrInvalidSetlistURL})
+	w := post(handler, `{"url":"https://example.com/setlist"}`)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+	if got := errorOf(t, w); got != "only setlist.fm setlist links are supported" {
+		t.Errorf("unexpected error: %q", got)
+	}
+}
+
+func TestSetlistJob_URLServiceError(t *testing.T) {
+	handler := NewAPIAdapter(&mockSetlistService{err: errors.New("Setlist not found")})
+	w := post(handler, `{"url":"`+setlistLink+`"}`)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+	if got := errorOf(t, w); got != "Setlist not found" {
+		t.Errorf("unexpected error: %q", got)
 	}
 }
