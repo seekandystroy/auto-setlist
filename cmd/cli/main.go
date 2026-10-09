@@ -17,17 +17,28 @@ func main() {
 
 	var includeCovers bool
 	var tourPlaylist bool
+	var setlistURL string
 	flag.BoolVar(&includeCovers, "include-covers", false, "include cover songs from the original artist when searching Spotify")
 	flag.BoolVar(&includeCovers, "ic", false, "shorthand for --include-covers")
 	flag.BoolVar(&tourPlaylist, "tour-playlist", false, "build a playlist from all songs played across the latest tour")
 	flag.BoolVar(&tourPlaylist, "tp", false, "shorthand for --tour-playlist")
+	flag.StringVar(&setlistURL, "url", "", "build a playlist from a specific setlist.fm setlist link")
+	flag.StringVar(&setlistURL, "u", "", "shorthand for --url")
 	flag.Parse()
 
-	if flag.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: auto-setlist [--include-covers] <artist name>")
+	artistName := strings.Join(flag.Args(), " ")
+	switch {
+	case setlistURL != "" && artistName != "":
+		fmt.Fprintln(os.Stderr, "use either an artist or --url, not both")
+		os.Exit(1)
+	case setlistURL != "" && tourPlaylist:
+		fmt.Fprintln(os.Stderr, "--tour-playlist can't be used with --url")
+		os.Exit(1)
+	case setlistURL == "" && artistName == "":
+		fmt.Fprintln(os.Stderr, "usage: auto-setlist [--include-covers|-ic] [--tour-playlist|-tp] <artist name>")
+		fmt.Fprintln(os.Stderr, "       auto-setlist [--include-covers|-ic] --url|-u <setlist.fm link>")
 		os.Exit(1)
 	}
-	artistName := strings.Join(flag.Args(), " ")
 
 	apiKey := os.Getenv("SETLISTFM_API_KEY")
 	if apiKey == "" {
@@ -53,7 +64,12 @@ func main() {
 		spotifyAdapter,
 	)
 
-	playlistID, err := svc.SetlistToPlaylist(context.Background(), artistName, includeCovers, tourPlaylist)
+	var playlistID string
+	if setlistURL != "" {
+		playlistID, err = svc.SetlistURLToPlaylist(context.Background(), setlistURL, includeCovers)
+	} else {
+		playlistID, err = svc.SetlistToPlaylist(context.Background(), artistName, includeCovers, tourPlaylist)
+	}
 	if err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
